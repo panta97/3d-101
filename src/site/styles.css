@@ -1,0 +1,592 @@
+/* ---------------------------------------------------------------------------
+   3d-101 shared styles. One-dark-adjacent palette; the CodeMirror editor uses
+   the actual one-dark theme, so page chrome sits a step darker around it.
+--------------------------------------------------------------------------- */
+
+:root {
+  --bg: #1b1f27;
+  --bg-raised: #21252f;
+  --bg-inset: #161a21;
+  --border: #323845;
+  --fg: #c6cdd9;
+  --fg-dim: #8a93a5;
+  --accent: #61afef;
+  --green: #98c379;
+  --red: #e06c75;
+  --yellow: #e5c07b;
+  --purple: #c678dd;
+  --cyan: #56b6c2;
+  --mono: 'SF Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 17px/1.65 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- header / footer chrome ---- */
+
+.site-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.9rem 1.4rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.site-title {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--accent);
+  text-decoration: none;
+  letter-spacing: 0.02em;
+}
+
+.site-breadcrumb {
+  color: var(--fg-dim);
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.module-nav {
+  max-width: 76ch;
+  margin: 4rem auto 0;
+  padding: 1.5rem 1.4rem 3rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.module-nav a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.module-nav a:hover {
+  text-decoration: underline;
+}
+
+.module-nav .is-stub {
+  color: var(--fg-dim);
+}
+
+/* ---- prose column ---- */
+
+.prose {
+  max-width: 76ch;
+  margin: 0 auto;
+  padding: 2.5rem 1.4rem 1rem;
+}
+
+.prose h1 {
+  font-size: 2rem;
+  line-height: 1.2;
+  margin: 0.5rem 0 0.4rem;
+}
+
+.prose .subtitle {
+  color: var(--fg-dim);
+  font-size: 1.05rem;
+  margin: 0 0 2rem;
+}
+
+.prose h2 {
+  font-size: 1.4rem;
+  margin: 3.2rem 0 0.8rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--border);
+}
+
+.prose h2 .secnum {
+  color: var(--fg-dim);
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  margin-right: 0.55rem;
+}
+
+.prose h3 {
+  font-size: 1.1rem;
+  margin: 2rem 0 0.6rem;
+}
+
+.prose p {
+  margin: 0.9rem 0;
+}
+
+.prose a {
+  color: var(--accent);
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.4rem;
+}
+
+.prose li {
+  margin: 0.35rem 0;
+}
+
+.prose code,
+.prose kbd {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.08em 0.35em;
+  color: var(--yellow);
+}
+
+.prose pre {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.9rem 1.1rem;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.prose pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--fg);
+  font-size: inherit;
+}
+
+.prose figure {
+  margin: 1.6rem 0;
+}
+
+.prose figcaption {
+  color: var(--fg-dim);
+  font-size: 0.85rem;
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 3rem 0;
+}
+
+/* ---- callouts ---- */
+
+.insight,
+.hook,
+.convention,
+.warning {
+  margin: 1.4rem 0;
+  padding: 0.85rem 1.1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+}
+
+.insight {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-raised));
+  font-size: 1.02em;
+}
+
+.insight::before,
+.hook::before,
+.convention::before,
+.warning::before {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.3rem;
+}
+
+.insight::before {
+  content: 'key insight';
+  color: var(--accent);
+}
+
+.hook {
+  border-left-color: var(--purple);
+  background: color-mix(in srgb, var(--purple) 6%, var(--bg-raised));
+}
+
+.hook::before {
+  content: 'in real engines';
+  color: var(--purple);
+}
+
+.convention {
+  border-left-color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 6%, var(--bg-raised));
+}
+
+.convention::before {
+  content: 'convention — pinned for the whole course';
+  color: var(--cyan);
+}
+
+.warning {
+  border-left-color: var(--yellow);
+  background: color-mix(in srgb, var(--yellow) 6%, var(--bg-raised));
+}
+
+.warning::before {
+  content: 'production reality';
+  color: var(--yellow);
+}
+
+/* ---- widgets ---- */
+
+.widget {
+  margin: 1.8rem 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.widget-canvas-wrap {
+  position: relative;
+}
+
+.widget canvas {
+  display: block;
+  width: 100%;
+  touch-action: none;
+  cursor: default;
+}
+
+.widget canvas.is-draggable {
+  cursor: grab;
+}
+
+.widget canvas.is-dragging {
+  cursor: grabbing;
+}
+
+.widget-hud {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.8rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--fg-dim);
+  pointer-events: none;
+  white-space: pre;
+}
+
+.widget-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.4rem;
+  align-items: center;
+  padding: 0.7rem 1rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg-inset);
+  font-size: 0.85rem;
+}
+
+.widget-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--fg-dim);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.widget-controls input[type='range'] {
+  accent-color: var(--accent);
+  width: 140px;
+}
+
+.widget-controls input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+.widget-controls .value {
+  font-family: var(--mono);
+  color: var(--fg);
+  min-width: 4.5ch;
+  display: inline-block;
+}
+
+.widget-note {
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
+  color: var(--fg-dim);
+  border-top: 1px solid var(--border);
+}
+
+button,
+.btn {
+  font: inherit;
+  font-size: 0.84rem;
+  font-family: var(--mono);
+  color: var(--fg);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+}
+
+button:hover,
+.btn:hover {
+  border-color: var(--fg-dim);
+}
+
+button.primary,
+.btn.primary {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-raised));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  color: var(--accent);
+}
+
+button.danger-ghost {
+  color: var(--fg-dim);
+}
+
+/* ---- exercises ---- */
+
+.exercise {
+  margin: 1.8rem 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.exercise-header {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.65rem 1rem;
+  background: var(--bg-inset);
+  border-bottom: 1px solid var(--border);
+}
+
+.exercise-header .tag {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--green);
+  border: 1px solid color-mix(in srgb, var(--green) 40%, var(--border));
+  border-radius: 4px;
+  padding: 0.1rem 0.45rem;
+}
+
+.exercise-header .title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.exercise-header .done {
+  margin-left: auto;
+  color: var(--green);
+  font-size: 0.85rem;
+  font-family: var(--mono);
+}
+
+.exercise-signature {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--fg-dim);
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  white-space: pre-wrap;
+}
+
+.exercise-editor {
+  font-size: 0.88rem;
+}
+
+.exercise-editor .cm-editor {
+  background: #282c34;
+}
+
+.exercise-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+.exercise-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg-inset);
+}
+
+.exercise-actions .spacer {
+  flex: 1;
+}
+
+.exercise-results {
+  padding: 0.4rem 1rem 0.7rem;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+
+.exercise-results:empty {
+  display: none;
+}
+
+.test-row {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.22rem 0;
+  align-items: baseline;
+}
+
+.test-row .mark {
+  flex: none;
+  width: 1.2em;
+}
+
+.test-row.pass .mark {
+  color: var(--green);
+}
+
+.test-row.fail .mark {
+  color: var(--red);
+}
+
+.test-row .detail {
+  color: var(--fg-dim);
+}
+
+.test-row .hint {
+  color: var(--yellow);
+}
+
+.exercise-message {
+  padding: 0.55rem 1rem;
+  font-size: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+.exercise-message.error {
+  color: var(--red);
+}
+
+.exercise-message.info {
+  color: var(--fg-dim);
+}
+
+.exercise-message:empty {
+  display: none;
+}
+
+/* ---- home page table of contents ---- */
+
+.toc {
+  list-style: none;
+  padding: 0;
+  margin: 2rem 0;
+}
+
+.toc-item {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 0.7rem 0;
+  background: var(--bg-raised);
+}
+
+.toc-item > a,
+.toc-item > .stub {
+  display: flex;
+  gap: 1rem;
+  padding: 0.9rem 1.1rem;
+  text-decoration: none;
+  color: inherit;
+  align-items: baseline;
+}
+
+.toc-item > a:hover {
+  border-radius: 10px;
+  outline: 1px solid var(--accent);
+}
+
+.toc-num {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-weight: 700;
+  flex: none;
+  width: 2.2ch;
+  text-align: right;
+}
+
+.toc-item.is-stub .toc-num {
+  color: var(--fg-dim);
+}
+
+.toc-body .t {
+  font-weight: 600;
+}
+
+.toc-item.is-stub .toc-body .t {
+  color: var(--fg-dim);
+}
+
+.toc-body .b {
+  display: block;
+  font-size: 0.86rem;
+  color: var(--fg-dim);
+  margin-top: 0.15rem;
+}
+
+.toc-soon {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1rem 0.45rem;
+  align-self: center;
+}
+
+/* ---- KaTeX sizing ---- */
+
+.katex {
+  font-size: 1.05em;
+}
+
+@media (max-width: 640px) {
+  body {
+    font-size: 16px;
+  }
+
+  .widget-controls input[type='range'] {
+    width: 100px;
+  }
+}

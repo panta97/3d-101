@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Module 1 — Vectors: The Atoms of 3D · 3d-101</title>
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body>
+    <main class="prose">
+      <h1>Vectors: The Atoms of 3D</h1>
+      <p class="subtitle">
+        Points, displacements, and the handful of one-line functions every engine is built on.
+      </p>
+
+      <p>
+        Open up any 3D engine — Unreal, Unity, the renderer inside Blender — and at the bottom of
+        every call stack you find the same thing: little packets of two or three numbers being
+        added, scaled and measured, millions of times per frame. Character positions, camera
+        directions, surface normals, velocities, forces — all of them are <em>vectors</em>, and
+        nearly everything an engine does with them reduces to functions short enough to fit in a
+        tweet.
+      </p>
+      <p>
+        This module has you write that vocabulary yourself — <code>add</code>, <code>sub</code>,
+        <code>scale</code>, <code>length</code>, <code>normalize</code>, <code>lerp</code> and
+        their 3D twins — and from the moment each exercise passes, <em>your</em> implementation
+        drives the animations on this page. A wrong sign here is not a red test row; it is a
+        turret aiming backwards.
+      </p>
+
+      <p class="convention">
+        Axes: <b>+X right, +Y up</b>. Angles: <b>radians</b>, always — degrees appear only in UI
+        labels. Vectors are plain objects — <code>Vec2 = { x: number, y: number }</code>, no
+        classes — and functions <b>never mutate their inputs</b>: every operation returns a
+        brand-new object.
+      </p>
+
+      <!-- ============================ 1.1 ============================ -->
+      <h2><span class="secnum">1.1</span> The two faces of a vector</h2>
+
+      <p>Here is the entire data structure this module is about:</p>
+      <pre><code>type Vec2 = { x: number; y: number }
+
+const v = { x: 3, y: 2 }</code></pre>
+      <p>
+        Those two numbers carry two different meanings. Read as a <b>place</b>, <code>v</code> is
+        the point 3 units right and 2 up from the origin. Read as a <b>move</b>, it is the
+        instruction “go 3 right, 2 up” — issued from wherever you happen to be standing. A
+        position and a velocity have the exact same shape in memory; only the role differs.
+      </p>
+
+      <p class="insight">
+        A <code>Vec2</code> is two numbers with two meanings — “a place” or “a move” — and which
+        one lives in your head, not the type system.
+      </p>
+
+      <div data-widget="vector-playground"></div>
+
+      <p>
+        Addition is componentwise: <code>add(a, b)</code> returns
+        <code>{ x: a.x + b.x, y: a.y + b.y }</code>. Geometrically that is <b>tip-to-tail</b>:
+        walk the move <code>a</code>, then walk the move <code>b</code> from wherever
+        <code>a</code> left you. The rule happily mixes the two meanings, too — point plus
+        displacement is a new point — which is why the rover below can plant its flag at
+        <code>add(a, b)</code> and trust the math to know where the journey ends.
+      </p>
+
+      <div data-widget="tip-to-tail" data-driven-by="01/add"></div>
+
+      <p class="hook">
+        <code>position = add(position, scale(velocity, dt))</code> — better known as
+        <code>position += velocity * dt</code> — is the beating heart of every game loop ever
+        shipped. You are about to write the <code>add</code> half of it.
+      </p>
+
+      <div data-exercise="01/add"></div>
+
+      <!-- ============================ 1.2 ============================ -->
+      <h2><span class="secnum">1.2</span> Subtraction: the arrow between</h2>
+
+      <p>
+        Subtraction is also componentwise — <code>sub(a, b)</code> returns
+        <code>{ x: a.x - b.x, y: a.y - b.y }</code> — but its geometric reading is the one you
+        will use every single day: <b><code>sub(a, b)</code> is the arrow that carries you from
+        <code>b</code> to <code>a</code></b>. Verify it with the function you just wrote: start
+        at <code>b</code>, walk the arrow, and <code>add(b, sub(a, b))</code> lands exactly on
+        <code>a</code>. Its little sibling <code>neg(v)</code> flips a move into the exact
+        opposite move.
+      </p>
+
+      <p class="insight">
+        <code>sub(a, b)</code> points from b to a — “sub points at the first argument” — and
+        reversing it is the most common vector bug you will ever write.
+      </p>
+
+      <p>
+        The turret below aims along <code>sub(mouse, turretPos)</code>: the arrow from the turret
+        to your pointer. Get the order backwards and it will very confidently aim at the exact
+        opposite of everything you do.
+      </p>
+
+      <div data-widget="turret" data-driven-by="01/sub"></div>
+
+      <p class="hook">
+        <code>toTarget = sub(targetPos, myPos)</code> is the most-typed expression in gameplay
+        code: every homing missile, every AI that looks at the player, every camera that frames a
+        boss starts by asking “what is the arrow from me to it?”
+      </p>
+
+      <div data-exercise="01/sub"></div>
+
+      <!-- ============================ 1.3 ============================ -->
+      <h2><span class="secnum">1.3</span> Scaling and length</h2>
+
+      <p>
+        <code>scale(v, s)</code> multiplies both components by one number <code>s</code>: the
+        arrow keeps its direction and stretches by a factor of <code>s</code>. A negative
+        <code>s</code> spins it 180° through its own tail — same line, opposite way.
+      </p>
+      <p>
+        How long is an arrow? Drop a dashed line along x and another along y and the arrow
+        becomes the hypotenuse of its own staircase. Pythagoras does the rest:
+        $\operatorname{length}(v) = \sqrt{x^2 + y^2}$. Its cheaper sibling
+        <code>lengthSq</code> returns $x^2 + y^2$ without the root — square roots cost real time,
+        and comparisons never needed them: to ask “is anything within 30 meters?”, compare
+        <code>lengthSq</code> against $30^2$ and skip the <code>sqrt</code> entirely.
+      </p>
+
+      <p class="insight">
+        3D length is Pythagoras applied twice — the only new math in the third dimension is one
+        more <code>+ z*z</code> — and pros compare <code>lengthSq</code> to skip the square root.
+      </p>
+
+      <div data-widget="scale-length" data-driven-by="01/scale-length"></div>
+
+      <p>
+        Now the “applied twice” part. In the box below, the yellow floor diagonal is one right
+        triangle lying flat: $\sqrt{x^2 + z^2}$. That diagonal then becomes the <em>leg</em> of a
+        second right triangle standing upright, with the height as the other leg. The
+        hypotenuse-of-a-hypotenuse is the space diagonal: $\sqrt{x^2 + z^2 + y^2}$. Adding a
+        dimension added a term, not an idea.
+      </p>
+
+      <div data-widget="box-diagonal"></div>
+
+      <p class="warning">
+        That widget is this course's first 3D view — which means something just turned (x, y, z)
+        into pixels. That something is <code>project3()</code>, and for the next four modules it
+        stays a sealed black box: you may orbit it, but not open it. Real engines hand you the
+        same box (they call it a projection matrix). Module 5 pops the lid, and you will write
+        every line of it yourself.
+      </p>
+
+      <p class="hook">
+        <code>velocity = scale(aimDir, bulletSpeed)</code> turns a direction into motion. And the
+        humblest scale of all — multiply every move by <code>dt</code> — separates games that
+        work from the early classics that simulated per-frame and literally ran twice as fast on
+        a 60&nbsp;Hz machine as on a 30&nbsp;Hz one. Meanwhile, range checks ship as
+        <code>distanceSq(a, b) &lt; r * r</code> — <code>distanceSq</code> is simply
+        <code>lengthSq</code> measured between two points; you will write it in §1.4 — same
+        answer, zero square roots.
+      </p>
+
+      <div data-exercise="01/scale-length"></div>
+
+      <!-- ============================ 1.4 ============================ -->
+      <h2><span class="secnum">1.4</span> Normalization: pure direction</h2>
+
+      <p>
+        Divide a vector by its own length — <code>scale(v, 1 / length(v))</code> — and you get a
+        <b>unit vector</b>: length exactly 1, direction untouched. That is
+        <code>normalize</code>. Unit vectors are the currency of direction: multiply one by any
+        speed and you get a velocity of exactly that speed, no matter how far away the thing you
+        aimed at happens to be.
+      </p>
+
+      <p class="insight">
+        <code>normalize</code> strips “how far” and keeps “which way” — when characters move
+        faster diagonally, the missing line is almost always a <code>normalize</code>.
+      </p>
+
+      <p class="warning">
+        The diagonal bug famously shipped: classic shooters fed the raw input (1, 1) — length
+        $\sqrt{2} \approx 1.414$ — straight into movement, so holding forward+strafe was a real,
+        tournament-exploited 41% speed boost (“strafe-running”). The fix was one normalize.
+      </p>
+
+      <p>
+        One landmine remains: <code>normalize({ x: 0, y: 0 })</code>. The length is 0, the
+        division births <code>NaN</code>, and NaN infects every calculation it touches — one
+        frame later your entire scene is invisible and nothing threw. Course policy, enforced by
+        the tests: <b>normalize of the zero vector returns the zero vector</b>. While you are in
+        there, <code>distance(a, b)</code> is just <code>length(sub(a, b))</code>, and
+        <code>distanceSq</code> follows the same pattern. Watch what happens below when the
+        missile catches its target <em>exactly</em>.
+      </p>
+
+      <div data-widget="heat-seeker" data-driven-by="01/normalize"></div>
+
+      <div data-exercise="01/normalize"></div>
+
+      <!-- ============================ 1.5 ============================ -->
+      <h2><span class="secnum">1.5</span> Lerp: the workhorse of animation</h2>
+
+      <p>
+        Linear interpolation answers “what is the point fraction <code>t</code> of the way from
+        <code>a</code> to <code>b</code>?” Take the arrow between them and walk part of it:
+        $$\operatorname{lerp}(a, b, t) = a + (b - a)\,t$$
+        At $t = 0$ you stand on <code>a</code>, at $t = 1$ on <code>b</code>, at $t = 0.5$
+        exactly halfway. You already own every piece:
+        <code>add(a, scale(sub(b, a), t))</code>. Leave <code>t</code> unclamped — $t = 2$ keeps
+        walking past <code>b</code>, and sometimes that extrapolation is exactly what you want.
+      </p>
+
+      <p class="insight">
+        lerp(a, b, t) = a + (b − a)·t — start at a, go fraction t toward b; every smooth slide,
+        fade and tween reduces to this one line.
+      </p>
+
+      <p>
+        The famous trap is <code>cam = lerp(cam, target, 0.1)</code> <em>per frame</em>: each
+        frame closes 10% of the remaining gap, so a 144&nbsp;fps machine closes gaps far faster
+        than a 20&nbsp;fps one — same code, different game. The fix is
+        $\operatorname{damp}(a, b, \mathit{rate}, dt) = \operatorname{lerp}\!\big(a, b,\; 1 - e^{-\mathit{rate} \cdot dt}\big)$:
+        the exponential makes the total catch-up per <em>second</em> identical no matter how the
+        frames slice it. Here, <code>rate</code> is the chase strength and <code>dt</code> is the
+        frame's duration in seconds.
+      </p>
+
+      <div data-widget="chase-cam" data-driven-by="01/lerp"></div>
+
+      <p>
+        One more thing <code>lerp</code> buys you, free of charge: curves. Lerp between two lerps
+        and the moving point sweeps a parabola — a quadratic Bézier, the primitive under every
+        font glyph and easing curve you have ever seen.
+      </p>
+
+      <div data-widget="bezier-figure"></div>
+
+      <div data-exercise="01/lerp"></div>
+
+      <!-- ============================ 1.6 ============================ -->
+      <h2><span class="secnum">1.6</span> Into the third dimension</h2>
+
+      <p>Everything so far was 2D on purpose — every idea fit on a flat canvas. Now add the third number:</p>
+      <pre><code>type Vec3 = { x: number; y: number; z: number }</code></pre>
+      <p>
+        And… nothing else changes. <code>add3</code> adds three components instead of two.
+        <code>length3</code> is the box diagonal from §1.3: $\sqrt{x^2 + y^2 + z^2}$.
+        <code>normalize3</code> keeps the same zero-vector policy. <code>lerp3</code> is the same
+        one-liner, built from <code>add3</code>, <code>sub3</code> and <code>scale3</code>. You
+        will port all seven functions in one sitting, because each is a mechanical edit of code
+        you have already written and tested.
+      </p>
+
+      <p class="insight">
+        The only new math in 3D is one more component — every function you wrote this module
+        ports mechanically.
+      </p>
+
+      <p>
+        The comet below flies on your Vec3 functions — and reaches the screen through
+        <code>project3()</code>, the black box from §1.3. Still sealed; still Module 5's problem.
+      </p>
+
+      <div data-widget="comet" data-driven-by="01/vec3"></div>
+
+      <div data-exercise="01/vec3"></div>
+
+      <!-- ========================== Capstone ========================== -->
+      <h2><span class="secnum">1.7</span> Capstone: the particle fountain</h2>
+
+      <p>
+        Time to spend everything you built. A particle system is the “hello, world” of game
+        physics: a pool of particles, each just
+        <code>{ pos: Vec3, vel: Vec3, age: number }</code>, launched from the origin and
+        abandoned to gravity. You write the two functions that power the whole thing:
+      </p>
+      <ul>
+        <li>
+          <code>spawnParticle(speed)</code> — a fresh particle at the origin, velocity pointing in
+          a <em>random</em> direction with length exactly <code>speed</code> (random vector,
+          <code>normalize3</code>d to a direction, <code>scale3</code>d to speed), age 0.
+        </li>
+        <li>
+          <code>updateParticle(p, gravity, dt)</code> — one physics step, returning a
+          <em>new</em> particle: update the velocity first (<code>vel + gravity·dt</code>), then
+          move the position using the <em>new</em> velocity, then add <code>dt</code> to the age.
+        </li>
+      </ul>
+
+      <p class="insight">
+        Velocity first, then position with the <em>new</em> velocity — that ordering is
+        semi-implicit Euler, and it is the difference between simulations that settle and
+        simulations that explode.
+      </p>
+
+      <div data-widget="particle-fountain" data-driven-by="01/capstone-fountain"></div>
+
+      <div data-exercise="01/capstone-fountain"></div>
+
+      <p>
+        You just shipped a physics integrator. It's small, but it's real: the loop you wrote —
+        velocity gains acceleration, position gains velocity, time marches — is, at industrial
+        fidelity, the same loop running inside Havok and PhysX. Every vector function on this
+        page came out of your editor, and from here on the course builds with <em>your</em>
+        library.
+      </p>
+      <p>
+        Two loose threads to carry forward. You can add vectors and scale them by numbers — but
+        what could <code>a * b</code> possibly mean for <em>two vectors</em>? Module 2 gives the
+        two useful answers, and between them they power lighting, field-of-view checks, surface
+        normals and collision response. And <code>project3()</code> is still a sealed box —
+        Module 5 opens it for good.
+      </p>
+    </main>
+  </body>
+</html>

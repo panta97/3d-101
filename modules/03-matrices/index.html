@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Module 3 — Matrices: Transforming Space · 3d-101</title>
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body>
+    <main class="prose">
+      <h1>Matrices: Transforming Space</h1>
+      <p class="subtitle">
+        Columns as basis vectors, composition, the homogeneous trick, Mat4 and TRS hierarchies.
+      </p>
+
+      <p>
+        Module 2 ended with an itch we couldn't scratch. You can measure angles with
+        <code>dot</code>, manufacture perpendiculars with <code>cross</code> — but you still can't
+        <em>turn</em> anything. Spin a turret, swing a door, orbit a moon: every one of those is
+        "move every point of this object, all at once, consistently," and we have no tool for it.
+      </p>
+      <p>
+        That tool is the matrix. Forget the spreadsheet of numbers you met in school: a matrix is a
+        <em>recording of where space went</em>. Play the recording into any vector and it tells you
+        where that vector ended up. This module you'll build the whole machine — 2×2, then 3×3,
+        then the 4×4 that every GPU on earth eats for breakfast — and finish by wiring a solar
+        system out of nothing but matrix multiplies.
+      </p>
+
+      <!-- ============================== 3.1 ============================== -->
+      <h2 id="s31"><span class="secnum">3.1</span> A matrix is where the basis lands</h2>
+
+      <p>
+        Two vectors carry the whole 2D plane on their shoulders: $\hat\imath = (1, 0)$ and
+        $\hat\jmath = (0, 1)$, the <em>basis</em>. Every vector you've ever written is secretly a
+        recipe made from them: $(x, y)$ <em>means</em> $x \cdot \hat\imath + y \cdot \hat\jmath$ —
+        "walk $x$ copies of î, then $y$ copies of ĵ."
+      </p>
+      <p>
+        Now transform the plane — rotate it, stretch it, shear it. If the transform is
+        <em>linear</em> (gridlines stay straight, parallel and evenly spaced; the origin stays
+        put), the recipe survives: wherever $\hat\imath$ and $\hat\jmath$ land, $(x, y)$ lands at
+        $x$ copies of the new î plus $y$ copies of the new ĵ. So the entire transform is pinned
+        down by just two landing spots — four numbers. Those four numbers are a 2×2 matrix, and we
+        store them column-major: <code>Mat2 = [ix, iy, jx, jy]</code>, where column 1
+        <code>(m[0], m[1])</code> is where î landed and column 2 <code>(m[2], m[3])</code> is where
+        ĵ landed.
+      </p>
+      <p class="insight">
+        Read the columns: column 1 is where $(1,0)$ lands, column 2 is where $(0,1)$ lands —
+        and matrix-vector multiplication is literally $x \cdot \text{column 1} + y \cdot
+        \text{column 2}$. That's the whole operation.
+      </p>
+      $$
+      \begin{bmatrix} a & c \\ b & d \end{bmatrix}
+      \begin{bmatrix} x \\ y \end{bmatrix}
+      \;=\;
+      x \begin{bmatrix} a \\ b \end{bmatrix} + y \begin{bmatrix} c \\ d \end{bmatrix}
+      $$
+      <p>
+        That's why <code>transformVec2(m, v)</code> below is a two-liner built from Module 1's
+        <code>add</code> and <code>scale</code> — no double loop, no mystery. Sanity check it in
+        your head: feed in $\hat\imath = (1, 0)$ and the formula returns one copy of column 1 and
+        zero of column 2. Multiplying a matrix by î just <em>reads off</em> where î goes.
+      </p>
+      <p class="hook">
+        A matrix is a coordinate system you can mail to someone. An animated game character carries
+        100+ bone matrices — one per joint, each saying "this is where my elbow's local space sits
+        now" — rebuilt and shipped to the GPU every single frame.
+      </p>
+
+      <div data-widget="grid-deformer" data-driven-by="03/transform"></div>
+      <div data-exercise="03/transform"></div>
+
+      <!-- ============================== 3.2 ============================== -->
+      <h2 id="s32"><span class="secnum">3.2</span> The matrix factory</h2>
+
+      <p>
+        If a matrix is just "where î and ĵ land," then building one is just answering that
+        question. Rotation by angle $\theta$ (counterclockwise, radians): î starts at angle 0 on
+        the unit circle and swings to angle $\theta$, so it lands at $(\cos\theta, \sin\theta)$.
+        ĵ starts at 90° and swings to $90^\circ + \theta$, which works out to
+        $(-\sin\theta, \cos\theta)$. Write the two landing spots as columns and you're done:
+      </p>
+      $$
+      R(\theta) =
+      \begin{bmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{bmatrix}
+      \qquad
+      S(s_x, s_y) =
+      \begin{bmatrix} s_x & 0 \\ 0 & s_y \end{bmatrix}
+      $$
+      <p class="insight">
+        Never memorize the rotation matrix — re-derive it in five seconds by asking where î and ĵ
+        go: $\hat\imath \to (\cos\theta, \sin\theta)$, $\hat\jmath \to (-\sin\theta, \cos\theta)$.
+        And the determinant is the matrix's area-scaling factor — negative means the grid flipped
+        inside-out.
+      </p>
+      <p>
+        The determinant <code>det2(m) = m[0]·m[3] − m[2]·m[1]</code> is an old friend wearing a
+        suit: it's exactly Module 2's <code>cross2(column 1, column 2)</code> — the signed area of
+        the parallelogram the two columns span. The unit square has area 1; after the transform its
+        image has area $|\det|$, so <em>every</em> area scales by that factor. Rotations have
+        determinant $\cos^2\theta + \sin^2\theta = 1$ (they stretch nothing), <code>scaling2(2, 3)</code>
+        has determinant 6, and a mirror has determinant −1: same area, opposite winding.
+      </p>
+      <p class="convention">
+        Angles are radians, here and everywhere in this course. <code>rotation2(30)</code> is not
+        30 degrees — it's 30 radians, nearly five full turns, and the numbers it produces will look
+        like nonsense. Degrees exist only in UI labels (the θ slider below shows both).
+      </p>
+      <p class="hook">
+        <code>rotation2(t * spinSpeed)</code> is every spinning coin pickup you've ever collected,
+        and <code>scaling2(1.3, 0.7)</code> snapping back to <code>(1, 1)</code> is squash-and-stretch,
+        the oldest trick in animation.
+      </p>
+      <p class="warning">
+        Plant this flag now: non-uniform scale (sx ≠ sy) <em>breaks surface normals</em>. Scale a
+        ramp 2× horizontally and its normal must rotate to stay perpendicular — pushing the normal
+        through the same matrix gives the wrong answer. The fix (the inverse-transpose) arrives in
+        Module 7; for now, just remember normals are not ordinary vectors.
+      </p>
+
+      <div data-widget="matrix-factory" data-driven-by="03/factory"></div>
+      <div data-exercise="03/factory"></div>
+
+      <!-- ============================== 3.3 ============================== -->
+      <h2 id="s33"><span class="secnum">3.3</span> Composition: chains read backwards</h2>
+
+      <p>
+        One transform is nice; pipelines are the point. "Rotate, then stretch" should collapse into
+        a single matrix so you pay for one transform per vertex, not ten. That collapse is matrix
+        multiplication: <code>mul2(a, b)</code> builds the matrix that applies <code>b</code> first
+        and <code>a</code> second — the same inside-out order as <code>f(g(x))</code>, because
+        $M_2 (M_1 v)$ hits $v$ with $M_1$ before $M_2$ ever sees it.
+      </p>
+      <p class="insight">
+        $M_2 \cdot M_1 \cdot v$ applies $M_1$ first — chains read right-to-left, exactly like
+        $f(g(x))$. And they don't commute: rotate-then-stretch is a different animal from
+        stretch-then-rotate.
+      </p>
+      <p>
+        And you already wrote the hard part. A matrix is "where the basis lands," so the product's
+        column 1 is just <em>b's column 1 pushed through a</em> — call your own
+        <code>transformVec2</code> from 3.1 on each of <code>b</code>'s columns and staple the
+        results together. No triple loop required (though one works too).
+      </p>
+      <p>
+        Don't take non-commutativity on faith — take $S = [2,0,0,1]$ (stretch x) and $R$ = rot 90°:
+        <code>mul2(S, R)</code> rotates the F upright <em>then</em> fattens it; <code>mul2(R, S)</code>
+        fattens it first, and the rotation carries that fatness somewhere else entirely. The widget's
+        swap button is that argument in one click.
+      </p>
+
+      <div data-widget="pipeline" data-driven-by="03/compose"></div>
+      <div data-exercise="03/compose"></div>
+
+      <!-- ============================== 3.4 ============================== -->
+      <h2 id="s34"><span class="secnum">3.4</span> The translation problem and the homogeneous trick</h2>
+
+      <p>
+        Here's the embarrassment: the most common transform in any game —
+        <em>move this thing over there</em> — cannot be written as a 2×2 matrix. Look at the
+        formula from 3.1: $M \cdot (0,0) = 0 \cdot \text{col1} + 0 \cdot \text{col2} = (0,0)$,
+        always. A linear map must fix the origin, and translation's whole job is to move it.
+      </p>
+      <p>
+        The fix is the best trick in graphics. Glue a third coordinate onto every point: $(x, y)$
+        becomes $(x, y, 1)$. Your flat 2D world is now the plane $w = 1$ floating inside a 3D
+        space — and in that bigger space, a perfectly ordinary <em>linear</em> map can slide your
+        whole plane sideways. Which one? A shear: the 3×3 matrix below leaves î and ĵ alone and
+        tilts the $w$ axis, so the higher you sit, the further you slide. At $w = 1$, you slide by
+        exactly $(t_x, t_y)$:
+      </p>
+      $$
+      \begin{bmatrix} 1 & 0 & t_x \\ 0 & 1 & t_y \\ 0 & 0 & 1 \end{bmatrix}
+      \begin{bmatrix} x \\ y \\ 1 \end{bmatrix}
+      =
+      \begin{bmatrix} x + t_x \\ y + t_y \\ 1 \end{bmatrix}
+      $$
+      <p class="insight">
+        A linear map must fix the origin — and translation's whole job is to move it. The fix:
+        glue a 1 onto every point, lifting the plane to $w = 1$, where a plain 3D shear slides it
+        sideways. Translation in 2D is a shear in 3D — that is the entire reason 3D graphics uses
+        4×4 matrices.
+      </p>
+      <p>
+        In code: <code>translation2(tx, ty)</code> returns a column-major <code>Mat3</code> (nine
+        numbers; the translation column lives at indices 6 and 7), and
+        <code>transformPoint2(m, p)</code> computes $x \cdot \text{col1} + y \cdot \text{col2} +
+        1 \cdot \text{col3}$ — that trailing $1$ is the point's $w$. Now ask: what should happen to
+        a <em>direction</em>, like "the gun barrel points northeast"? Sliding the gun across the
+        map must not change which way it points. Give directions $w = 0$: the translation column
+        gets multiplied by zero and vanishes. That's <code>transformDir2(m, v)</code> — same
+        matrix, one different bit.
+      </p>
+      <p class="insight">
+        Points get $w = 1$ and move; directions get $w = 0$ and don't. Module 1's point/arrow
+        duality finally gets a type system — and it lives in the matrix.
+      </p>
+      <p class="warning">
+        War story: transform a gun's forward direction with $w = 1$ — one flipped flag — and the
+        translation gets baked into your "direction." Bullets spray toward world-origin-plus-nonsense,
+        and only when the shooter stands far from the origin. This exact bug ships in real games.
+        When aim drifts with position, audit your w's first.
+      </p>
+
+      <div data-widget="the-lift" data-driven-by="03/homogeneous"></div>
+      <div data-exercise="03/homogeneous"></div>
+
+      <!-- ============================== 3.5 ============================== -->
+      <h2 id="s35"><span class="secnum">3.5</span> The sandwich: do it somewhere else</h2>
+
+      <p>
+        <code>rotation2</code> only knows how to rotate about the origin — that's the only point a
+        linear map can't move. So how do you swing a door around its hinge at $p$? You don't teach
+        rotation a new trick. You bring the problem to the tool: slide the whole world so the hinge
+        sits on the origin, do the plain rotation you already own, slide everything back.
+      </p>
+      $$
+      M \;=\; T(p) \cdot R(\theta) \cdot T(-p)
+      $$
+      <p>
+        Read it right-to-left like every chain: $T(-p)$ first (hinge to origin), $R(\theta)$
+        second, $T(p)$ last (carry it home). The acid test of <code>rotationAbout(p, theta)</code>
+        is the hinge itself: it rides to the origin, ignores the rotation, and rides back —
+        <em>exactly</em> where it started. If your hinge wanders, your sandwich is inside-out.
+      </p>
+      <p class="insight">
+        To do anything "somewhere else," carry it to the origin, do it there, carry it back:
+        $T(p) \cdot R \cdot T(-p)$. Learn the pattern once and reuse it forever — spinning doors,
+        orbiting moons, zoom-at-cursor, rotation about any 3D axis. It is all the same sandwich.
+      </p>
+      <p>
+        First you'll need <code>mul3</code> — same column-pushing idea as <code>mul2</code>, one
+        size up. Then <code>rotationAbout</code> is three matrices and two multiplies, built from
+        your own <code>translation2</code> and <code>rotation2</code> (we provide
+        <code>mat3FromMat2</code> to lift the 2×2 rotation into a 3×3 with no translation).
+      </p>
+
+      <div data-widget="the-door" data-driven-by="03/sandwich"></div>
+      <div data-exercise="03/sandwich"></div>
+
+      <!-- ============================== 3.6 ============================== -->
+      <h2 id="s36"><span class="secnum">3.6</span> To 3D: the Mat4</h2>
+
+      <p>
+        Everything you just built scales up without a single new idea. A 3D point becomes
+        $(x, y, z, 1)$, a 3D direction $(x, y, z, 0)$, and the matrix becomes 4×4 — sixteen
+        numbers, column-major, translation parked at indices 12, 13, 14:
+      </p>
+      $$
+      M = \begin{bmatrix}
+      m_0 & m_4 & m_8 & m_{12} \\
+      m_1 & m_5 & m_9 & m_{13} \\
+      m_2 & m_6 & m_{10} & m_{14} \\
+      m_3 & m_7 & m_{11} & m_{15}
+      \end{bmatrix}
+      \quad
+      \begin{matrix}
+      \text{cols 0, 1, 2: where } \hat{x}, \hat{y}, \hat{z} \text{ land} \\
+      \text{col 3: where the origin went} \\
+      \text{bottom row: } (0,0,0,1) \text{ for now}
+      \end{matrix}
+      $$
+      <p class="insight">
+        A 4×4 is bookkeeping you already know: the upper-left 3×3 columns say where x̂, ŷ, ẑ land;
+        the fourth column says where the origin went.
+      </p>
+      <p>
+        One genuinely new decision: rotation in 3D needs an axis. <code>rotationY(theta)</code>
+        spins about ŷ, leaving it untouched while x̂ and ẑ circle in the ground plane. Our
+        right-handed convention pins the direction: curl your right hand's fingers from x̂ around
+        +y, and at $\theta = \pi/2$, x̂ has swung to $-\hat{z}$ while ẑ swings to $+\hat{x}$.
+        Derive it the 3.2 way — ask where each basis vector lands — and the matrix writes itself.
+        <code>mul4</code>, <code>translation3</code>, <code>scaling3</code>,
+        <code>transformPoint3</code> and <code>transformDir3</code> are your 2D functions with one
+        more column to carry.
+      </p>
+
+      <div data-widget="mat4-cube" data-driven-by="03/mat4"></div>
+      <div data-exercise="03/mat4"></div>
+
+      <!-- ============================== 3.7 ============================== -->
+      <h2 id="s37"><span class="secnum">3.7</span> TRS and the conventions minefield</h2>
+
+      <p>
+        Open any object in Unity, Unreal, or Godot and the inspector shows position, rotation,
+        scale. Under the hood every one of those engines bakes the same matrix:
+        $M = T \cdot R \cdot S$ — read right-to-left, the model is scaled in its own local frame
+        first, rotated second, placed in the world last. The move/rotate/scale gizmo you've dragged
+        a thousand times is a live TRS decomposition. Your <code>trs(t, ry, s)</code> below is the
+        beating heart of every scene graph.
+      </p>
+      <p class="insight">
+        $T \cdot R \cdot S$ is the only order where each knob does what the editor says: scale
+        never touches position, rotation never skews, translation lands exactly at $t$. Swap the
+        order and the matrices contaminate each other — the widget's red ghost shows S·R·T scaling
+        and spinning the translation itself.
+      </p>
+      <p class="convention">
+        Row/column-major <em>storage</em> and row/column-vector <em>math</em> are two independent
+        choices — a 2×2 grid of possible conventions. Most matrix confusion on the internet is two
+        people arguing from different cells of that grid, each correct in their own cell. This
+        course (like WebGL and glMatrix) stores <strong>column-major</strong> and multiplies
+        <strong>column vectors</strong>, $M \cdot v$, chains right-to-left. DirectX-tradition code
+        multiplies row vectors $v \cdot M$, chains left-to-right, and its matrices are the
+        transposes of ours. Neither is wrong; mixing them silently is.
+      </p>
+      <p class="warning">
+        Don't accumulate rotation by multiplying a stored matrix every frame
+        (<code>m = mul4(spin, m)</code>). Float error compounds; after a few thousand frames the
+        columns drift off unit length and out of perpendicularity, and your model slowly shears
+        into modern art. Store the <em>angle</em>, rebuild the matrix fresh each frame —
+        that's why <code>trs</code> takes parameters, not matrices.
+      </p>
+      <p>
+        Honest disclaimer: <code>trs</code> takes a single Y-axis angle because composing X/Y/Z
+        Euler angles is a genuine trap — at certain combinations two axes line up and you lose a
+        degree of freedom (gimbal lock). Real engines store rotation as quaternions and convert to
+        a matrix at the last moment. That's Module 9; one axis is plenty to run a solar system.
+      </p>
+
+      <div data-widget="trs-gizmo" data-driven-by="03/trs"></div>
+      <div data-exercise="03/trs"></div>
+
+      <!-- ============================ capstone ============================ -->
+      <h2 id="capstone"><span class="secnum">★</span> Capstone: a solar system is a matrix sandwich</h2>
+
+      <p>
+        Three bodies. The sun spins in place: <code>sunMatrix(t)</code> is just your
+        <code>rotationY(t)</code>. The planet is a sandwich you already know how to read —
+        $R_y(0.5t) \cdot T(6,0,0) \cdot R_y(2t)$: right-to-left, the planet spins on its own axis,
+        gets pushed 6 units out, and the whole arrangement swings around the sun. And the moon is
+        the punchline: it doesn't orbit a <em>point</em>, it orbits the planet's moving
+        <em>frame</em> — <code>moonMatrix(t)</code> starts from <code>planetMatrix(t)</code> whole
+        and appends its own little orbit, $R_y(3t) \cdot T(2,0,0)$.
+      </p>
+      <p class="insight">
+        Child world = parent world × child local. That one multiplication is the scene graph —
+        every engine's transform hierarchy is this capstone with more bookkeeping.
+      </p>
+      <p class="hook">
+        Tank, turret, barrel: <code>muzzleWorld = tankM · turretM · barrelM · muzzleOffset</code>.
+        The turret yaws in tank space, the barrel pitches in turret space, and the muzzle flash
+        spawns in world space — four matrices, zero special cases. You'll write this exact chain in
+        every game with an articulated anything.
+      </p>
+      <p>
+        Wrong answers here are gloriously visible: get the moon's multiply order backwards and it
+        orbits the <em>sun</em> at planet distance, serene and completely wrong. Watch the trails.
+      </p>
+
+      <div data-widget="solar-system" data-driven-by="03/capstone-solar"></div>
+      <div data-exercise="03/capstone-solar"></div>
+
+      <p>
+        Two loose threads, both deliberate. First: the orbit camera you've been dragging all
+        module is itself a matrix — "where does the world sit relative to my eye" is just a change
+        of coordinate system, and in Module 4 you'll build it. Second: that camera matrix needs to
+        be <em>undone</em> (world-to-camera is the inverse of camera-to-world), and inverting a
+        general 4×4 is miserable — but for the rotate-and-translate matrices you built today, the
+        inverse is almost free. That beautiful shortcut opens Module 4.
+      </p>
+    </main>
+  </body>
+</html>

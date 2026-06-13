@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Module 2 — Dot, Cross, and Planes · 3d-101</title>
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body>
+    <main class="prose">
+      <h1>Dot, Cross, and Planes</h1>
+      <p class="subtitle">Two ways to multiply vectors — and the geometry empire built on them.</p>
+
+      <p>
+        Module 1 ended on a loose thread. You can add vectors, subtract them, scale them by a
+        number, measure them, normalize them, lerp them — but the one arithmetic move we never
+        made was multiplying two vectors by <em>each other</em>. What should
+        <code>a * b</code> even mean when both sides have a direction?
+      </p>
+      <p>
+        It turns out there are two answers worth having, and they answer two different questions.
+        The <strong>dot product</strong> takes two vectors and hands back a <em>number</em>:
+        <em>how much do these two agree?</em> The <strong>cross product</strong> takes two vectors
+        and hands back a <em>vector</em>: <em>what is perpendicular to both?</em> Between them
+        they make nearly every geometric decision a game or renderer ever makes: can the guard
+        see you, which way does this surface face, is that tree on screen, where does the laser
+        go next.
+      </p>
+      <p>
+        By the end of this module you'll have written all of it yourself — the stealth-game FOV
+        check, the wall-slide from Quake, frustum culling, the mirror-bounce formula — and used
+        nothing but those pieces to light a sphere, one dot product per pixel.
+      </p>
+
+      <!-- ================================================================ -->
+      <h2><span class="secnum">2.1</span> The dot product: an alignment meter</h2>
+
+      <p>
+        The recipe could not be plainer: multiply matching components, then add everything up.
+        For 2D vectors $a$ and $b$,
+      </p>
+      <p>$$ a \cdot b \;=\; a_x b_x + a_y b_y $$</p>
+      <p>
+        and <code>dot3</code> is the same idea with a $+\,a_z b_z$ tacked on. Two multiplies and
+        an add — no square roots, no trig, the cheapest function in this course. The shock is how
+        much geometry hides in it, because the same number also equals
+        $a \cdot b = |a|\,|b|\cos\theta$, where $|a|$ and $|b|$ are the lengths you wrote in
+        Module 1 and $\theta$ is the angle between the two vectors laid tail to tail. Cosine is
+        positive for angles under 90°, zero at exactly 90°, negative beyond — so the sign of one
+        cheap number tells you whether two directions agree, are perpendicular, or oppose each
+        other, and the magnitude tells you by how much.
+      </p>
+      <p class="insight">
+        <code>dot(a, b)</code> answers one question — how much does a go in b's direction?
+        Positive with, zero perpendicular, negative against: a one-number summary of agreement.
+      </p>
+      <p>
+        And here's the bridge to what you already own: feed a vector to itself and you get
+        $v \cdot v = v_x^2 + v_y^2$ — that is <code>lengthSq(v)</code>, character for character.
+        You wrote your first dot product in Module 1 without being told; length is just self-dot,
+        square-rooted.
+      </p>
+
+      <div data-widget="dot-meter" data-driven-by="02/dot"></div>
+      <div data-exercise="02/dot"></div>
+
+      <p class="hook">
+        Lambert's lighting law — <code>max(0, dot(n, L))</code>, surface normal against light
+        direction — is arguably the most-executed math expression in computer graphics, run for
+        every pixel of every lit surface of every frame. Dark Souls decides a backstab with
+        roughly <code>dot(victimFwd, attackerFwd) &gt; 0.7</code> — you and your victim facing
+        the same way. And backface culling drops half of every model's triangles with one dot
+        against the view direction before a single pixel is shaded.
+      </p>
+
+      <!-- ================================================================ -->
+      <h2><span class="secnum">2.2</span> Projection: shadows and decomposition</h2>
+
+      <p>
+        When $b$ has length 1 (write it $\hat b$), the geometric formula collapses:
+        $a \cdot \hat b = |a|\cos\theta$, which is exactly the length of $a$'s shadow on
+        $\hat b$'s line — a signed coordinate along that direction. Dot with a unit vector
+        <em>reads off a coordinate</em>. To turn that shadow back into a vector, rebuild it:
+        measure, then scale the direction by the measurement — <code>scale(b̂, dot(a, b̂))</code>.
+      </p>
+      <p>
+        For a $b$ of any length you could normalize first, but a little algebra dodges the square
+        root entirely: <code>project(a, b) = scale(b, dot(a, b) / lengthSq(b))</code>. The
+        division by <code>lengthSq(b)</code> cancels $b$'s length out twice — once for the
+        measuring, once for the rebuilding — so only $b$'s <em>direction</em> matters, as it
+        should. (Module 1's zero policy applies: <code>project(a, (0,0))</code> returns
+        <code>(0,0)</code>, never NaN.)
+      </p>
+      <p>
+        Whatever projection didn't capture is the <em>rejection</em>:
+        <code>reject(a, b) = sub(a, project(a, b))</code>, the part of $a$ perpendicular to $b$.
+        Project plus reject rebuilds $a$ exactly — every vector splits cleanly into
+        <em>along</em> + <em>across</em>.
+      </p>
+      <p class="insight">
+        Dot with a unit vector reads off a coordinate along that direction; projection is
+        "measure, then rebuild" — any vector splits into along + across, and physics, lighting
+        and cameras all run on that split.
+      </p>
+
+      <div data-widget="quake-legs" data-driven-by="02/project-reject"></div>
+      <div data-exercise="02/project-reject"></div>
+
+      <p class="hook">
+        <code>velocity -= n * dot(velocity, n)</code> — subtract the into-the-wall part, keep the
+        along-the-wall part — is the soul of Quake's player movement, and of every FPS since.
+        That smooth glide when you strafe into a wall at an angle? You just wrote it. It's the
+        rejection, spelled differently.
+      </p>
+
+      <!-- ================================================================ -->
+      <h2><span class="secnum">2.3</span> Cosine space: angles without acos</h2>
+
+      <p>
+        Sometimes you genuinely need the angle: <code>angleBetween(a, b)</code> normalizes both
+        sides (dividing the dot by $|a|\,|b|$), then applies <code>Math.acos</code> to the cosine.
+        But there's a landmine. Mathematically that cosine lives in $[-1, 1]$; in floating point,
+        two parallel vectors can produce $1.0000000000000002$ — and <code>acos</code> of that is
+        NaN, which then infects everything it touches. The fix is one line: clamp the cosine to
+        $[-1, 1]$ before the call. Always.
+      </p>
+      <p>
+        Mostly, though, you don't need the angle at all — you need a <em>comparison</em> against
+        a threshold, and you can do that entirely in cosine space. "Is the target within my
+        vision cone?" means the angle between my facing and the direction to the target is at
+        most half the cone's width: $\theta \le \mathrm{fov}/2$. Take the cosine of both sides —
+        remembering cosine <em>decreases</em> on $[0, \pi]$, so the inequality flips — and the
+        test becomes <code>dot(facing&#160;normalized, toTarget&#160;normalized) &gt;=
+        Math.cos(fov / 2)</code>. The right side is a constant you hoist out of the loop; the hot
+        path is a subtract, a couple of normalizes, and a dot. That's
+        <code>isInFov(guardPos, facing, targetPos, fov)</code> — and don't trust
+        <code>facing</code> to arrive unit-length; normalize it, or a long facing vector inflates
+        the dot until the guard sees everything.
+      </p>
+      <p class="insight">
+        Don't compute the angle — compare cosines: <code>dot(â, b̂) &gt;= cos(threshold)</code>
+        does the FOV test with zero trig in the hot loop; and when you must acos, clamp first,
+        because floats will hand you 1.0000000000000002 and acos will hand you NaN.
+      </p>
+      <p class="warning">
+        The clamp isn't paranoia. <code>angleBetween</code> between a vector and a float-dirty
+        copy of itself is the test below that breaks naive implementations — and in production it
+        breaks them rarely, intermittently, and only in release builds, which is so much worse.
+      </p>
+
+      <div data-widget="guard-duty" data-driven-by="02/angles"></div>
+      <div data-exercise="02/angles"></div>
+
+      <!-- ================================================================ -->
+      <h2><span class="secnum">2.4</span> The cross product: manufacturing perpendicularity</h2>
+
+      <p>
+        The dot product collapses two vectors into a number. Its sibling builds a new vector. For
+        3D vectors $a$ and $b$:
+      </p>
+      <p>
+        $$ a \times b = \big(\,a_y b_z - a_z b_y,\;\; a_z b_x - a_x b_z,\;\; a_x b_y - a_y b_x\,\big) $$
+      </p>
+      <p>
+        Each component skips its own axis and cross-multiplies the other two. The result is
+        perpendicular to <em>both</em> inputs — in our right-handed world,
+        <code>cross(x̂, ŷ)</code> is exactly $\hat z$ (curl your right hand's fingers from $a$
+        toward $b$; your thumb is the answer). Two bonuses ride along: the length
+        $|a \times b| = |a|\,|b|\sin\theta$ is the area of the parallelogram the two vectors
+        span, and swapping the arguments flips the result —
+        <code>cross(b, a) = neg(cross(a, b))</code>. That anticommutativity isn't a quirk to
+        memorize; it's how geometry encodes <em>winding order</em>. Parallel inputs pin down no
+        unique perpendicular, so the cross of parallel vectors collapses to the zero vector —
+        keep that failure mode in mind.
+      </p>
+      <p class="insight">
+        <code>cross(a, b)</code> is the only vector guaranteed perpendicular to both — it's where
+        every surface normal comes from — its length bonus-reports the parallelogram's area, and
+        swapping arguments flips it: order is meaning.
+      </p>
+
+      <div data-widget="cross-3d" data-driven-by="02/cross"></div>
+
+      <p>
+        2D has a shadow of this. Embed two 2D vectors at $z = 0$ and only the $z$ component of
+        their cross survives: <code>cross2(a, b) = a.x * b.y - a.y * b.x</code>, a single number
+        whose sign says whether $b$ is to the <em>left</em> (+) or <em>right</em> (−) of $a$.
+        File that away: in Module 6 that little sign test rasterizes triangles. Today it steers a
+        car.
+      </p>
+
+      <div data-widget="turn-signal" data-driven-by="02/cross"></div>
+      <div data-exercise="02/cross"></div>
+
+      <p class="hook">
+        <code>n = normalize3(cross(sub3(b, a), sub3(c, a)))</code> — two triangle edges in, unit
+        normal out — is where every surface normal in every mesh you've ever seen comes from.
+        Lighting, collision response, decals, foot placement: all downstream of one cross
+        product per triangle.
+      </p>
+      <p class="warning">
+        The legendary NaN camera: build a camera basis with <code>cross(forward, up)</code> and
+        let the player look straight up — forward and up go parallel, the cross collapses to
+        zero, normalize hits the zero policy (or worse, NaN in engines without one), and the
+        screen goes black or starts spinning. The standard fix: when
+        <code>|dot(forward, up)|</code> creeps near 1, swap in a fallback up axis. Every engine
+        has this if-statement; now you know why.
+      </p>
+
+      <!-- ================================================================ -->
+      <h2><span class="secnum">2.5</span> Planes: a dot-product threshold</h2>
+
+      <p>
+        Here is the entire definition of a plane in this course: a unit normal $n$ and a number
+        $d$. The plane is every point $p$ where $n \cdot p = d$ — that is, every point whose
+        coordinate along $n$ reads exactly $d$. (That's Section 2.2 again: dot with a unit vector
+        reads a coordinate.) No corner points, no extents — an infinite flat answer-surface to a
+        one-line question.
+      </p>
+      <p class="insight">
+        A plane is not a thing, it's a question: a unit normal n and a number d — the plane is
+        every point where dot(n, p) = d, and dot(n, p) − d is a signed distance answering "which
+        side, and how far" in one subtraction.
+      </p>
+      <p class="convention">
+        <code>Plane = { n: Vec3, d: number }</code> with <code>n</code> unit length. The plane is
+        the set $\{\,p : n \cdot p = d\,\}$; <code>signedDistance(plane, p) = dot3(n, p) − d</code>
+        is positive on the side $n$ points toward. We call that side <em>front</em>.
+      </p>
+      <p>
+        Everything you do with planes is that subtraction plus a policy.
+        <code>classifyPoint</code> buckets the signed distance into
+        <code>'front' / 'back' / 'on'</code> with an epsilon, because floats never land exactly
+        on zero. <code>planeFromPoints(a, b, c)</code> manufactures a plane from three points:
+        two edges span it, their cross is the normal —
+        <code>n = normalize3(cross(sub3(b, a), sub3(c, a)))</code>, then <code>d = dot3(n, a)</code>.
+        Walk the three points in the opposite order and the normal points the other way:
+        winding is data, not style.
+      </p>
+
+      <div data-widget="plane-swarm"></div>
+
+      <p>
+        Now the killer app. A camera's visible region — its <em>frustum</em> — is just planes
+        with normals pointing inward (six in 3D; four in the toy below). Wrap each object in a
+        bounding sphere of center $c$ and radius $r$, and <code>sphereInFrustum</code> falls out
+        of signed distance: a sphere is fully outside one plane exactly when
+        <code>signedDistance(plane, c) &lt; -r</code>, and any single rejecting plane is enough
+        to cull. A sphere straddling a plane is still (partly) visible — cull only on
+        <code>&lt; -r</code>, not <code>&lt; 0</code>, or objects will vanish while half on
+        screen.
+      </p>
+
+      <div data-widget="the-bouncer" data-driven-by="02/planes"></div>
+      <div data-exercise="02/planes"></div>
+
+      <p class="hook">
+        Frustum culling — six point-vs-plane checks per object — is how an open-world engine
+        rejects most of the map before drawing a single triangle; it's the cheapest work a
+        renderer ever does and the highest-leverage. And when a character's foot sinks through
+        the floor, the fix is the same math run backwards: the penetration depth <em>is</em> the
+        signed distance, so push the foot up by exactly that much.
+      </p>
+
+      <!-- ================================================================ -->
+      <h2><span class="secnum">2.6</span> Reflection: the bounce formula</h2>
+
+      <p>
+        You already own all the parts. A velocity $v$ hits a mirror with unit normal $n$. How
+        much of $v$ points <em>into</em> the surface? Section 2.2: project $v$ onto $n$ — and
+        since $n$ is unit length, that's just $(v \cdot n)\,n$. Subtract it once and the approach
+        is cancelled — you get the grazing slide along the surface (that was
+        <code>reject</code>, the Quake move). Subtract it <em>twice</em> and you push back out
+        the other side as hard as you came in:
+      </p>
+      <p>$$ r \;=\; v - 2\,(v \cdot n)\,n $$</p>
+      <p>
+        That's <code>reflect(v, n)</code>, with <code>reflect3</code> the identical formula in
+        3D — the construction never mentions dimension. Two sanity checks worth carrying around:
+        reflection preserves length (a mirror changes direction, never speed), and a grazing hit
+        with $v \cdot n = 0$ passes through unchanged — nothing pointed in, nothing to remove.
+      </p>
+      <p class="insight">
+        Measure how much of v points into the surface — dot(v, n) — and remove it twice: once to
+        cancel the approach, once to push back out; r = v − 2·dot(v,n)·n will light every shiny
+        surface and bounce every ray for the rest of this course.
+      </p>
+
+      <div data-widget="laser-bounce" data-driven-by="02/reflect"></div>
+      <div data-exercise="02/reflect"></div>
+
+      <!-- ================================================================ -->
+      <h2><span class="secnum">2.7</span> Capstone: shade a sphere with math alone</h2>
+
+      <p>
+        No geometry, no camera, no engine — just this module. Picture a unit sphere seen
+        head-on, filling a disc of pixel coordinates with $x^2 + y^2 \le 1$. At each pixel the
+        surface sits at $z = \sqrt{1 - x^2 - y^2}$, bulging toward you. And for a unit sphere
+        centered at the origin, the position on the surface <em>is</em> the outward normal —
+        already unit length, free of charge. That's <code>sphereNormal(x, y)</code>: a
+        <code>Vec3</code> on the disc, <code>null</code> off it.
+      </p>
+      <p>
+        Lighting a matte surface is one dot product. With $L$ a unit vector pointing
+        <em>toward</em> the light, Lambert's law says brightness is
+        <code>max(0, dot3(n, L))</code> — full strength facing the light, fading with the cosine,
+        clamped so surfaces facing away read 0 instead of glowing negatively. That's
+        <code>diffuse(x, y, L)</code>.
+      </p>
+      <p>
+        The shine is Section 2.6. Bounce the <em>incoming</em> light —
+        <code>scale3(L, -1)</code> — off the surface with <code>reflect3</code>, then ask how
+        directly the bounce flies at the viewer sitting along $+z$: dot it with
+        <code>vec3(0, 0, 1)</code>, clamp, and raise to the 32nd power so only near-perfect
+        alignment survives as a tight highlight. <code>shadePixel(x, y, L)</code> returns
+        diffuse plus that specular term, and the widget clamps for display.
+      </p>
+
+      <div data-widget="shaded-sphere" data-driven-by="02/capstone-sphere"></div>
+      <div data-exercise="02/capstone-sphere"></div>
+
+      <p>
+        Look at what's on screen: a convincingly 3D sphere — no geometry, no camera, no engine.
+        One dot product per pixel (plus a bounce for the shine). What you wrote is, in every way
+        that matters, a fragment shader; Module 7 makes that official, running shaders like this
+        across real triangles.
+      </p>
+      <p>
+        One thing this module's tools can't do: <em>turn</em> anything. The guards patrol on
+        rails, the car's heading is an angle we integrate by hand, and rotating a whole world of
+        points needs machinery we don't have yet. Rotation — and scaling, and shearing, and the
+        single idea that unifies them — is a matrix, and matrices are Module 3.
+      </p>
+    </main>
+  </body>
+</html>
