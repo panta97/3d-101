@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Module 4 — Coordinate Spaces &amp; the Camera · 3d-101</title>
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body>
+    <main class="prose">
+      <h1>Coordinate Spaces &amp; the Camera</h1>
+      <p class="subtitle">
+        Model, world and view space; change of basis; the cheap rigid inverse; building lookAt.
+      </p>
+
+      <p>
+        Module 3 left two threads dangling, and both are about the same object: the camera. You've
+        been dragging an orbit camera around every diagram for three modules, and we kept promising
+        it was "just a matrix." It is. A camera is nothing more exotic than a coordinate frame that
+        happens to have a lens — and "render the world from the camera's point of view" is nothing
+        more than "rewrite every point in the camera's coordinates."
+      </p>
+      <p>
+        So this module is really about one idea wearing several hats: <em>the same point has
+        different coordinates in different frames</em>, and a matrix is the dictionary that
+        translates between them. Model space, world space, view space — three frames, two
+        dictionaries. You'll build the dictionaries, discover that one of them (the view matrix) is
+        an <em>inverse</em>, panic briefly about inverting a 4×4, and then learn the shortcut that
+        makes it almost free. By the end you'll have written <code>lookAt</code> — the function at
+        the heart of every camera in every engine — and flown it through a scene.
+      </p>
+
+      <!-- ============================== 4.1 ============================== -->
+      <h2 id="s41"><span class="secnum">4.1</span> A point is nothing without a frame</h2>
+
+      <p>
+        Quick: where is $(3, 0, 0)$? You can't answer, and that's the whole lesson. Three units
+        along <em>which</em> x-axis, measured from <em>whose</em> origin? Coordinates are not
+        positions — they're instructions <em>relative to a frame</em>: an origin plus three axes.
+        Change the frame and the same physical point gets new numbers, the same numbers land on a
+        new point.
+      </p>
+      <p>
+        3D engines juggle three frames constantly. A model is authored in <strong>model space</strong>
+        (a.k.a. local space) — the teapot's spout is at some fixed local coordinate the artist set,
+        with the origin wherever they dropped the pivot. Drop that teapot into a scene and it gains a
+        position, rotation and scale in <strong>world space</strong>, the shared stage every object
+        stands on. And to draw it, you'll re-express everything one more time in <strong>view
+        space</strong> — the world as measured from the camera's eye. Model → world → view: each
+        arrow is a change of frame, and you already built the first one.
+      </p>
+      <p class="insight">
+        A frame is a matrix, and you wrote the constructor in Module 3 without knowing it: pack the
+        three axes into columns 0–2 and the origin into column 3, and you have a model→world matrix.
+        Feed it local coordinates, <code>transformPoint3</code> hands back world coordinates. The
+        TRS matrix from 3.7 was exactly this — a frame whose axes happen to be a rotated, scaled
+        basis.
+      </p>
+      $$
+      M_{\text{frame}} = \begin{bmatrix}
+      \,\hat{x} & \hat{y} & \hat{z} & o\, \\
+      \end{bmatrix}
+      = \begin{bmatrix}
+      x_x & y_x & z_x & o_x \\
+      x_y & y_y & z_y & o_y \\
+      x_z & y_z & z_z & o_z \\
+      0 & 0 & 0 & 1
+      \end{bmatrix}
+      $$
+      <p>
+        Your <code>frameMatrix(x, y, z, o)</code> below just drops four vectors into a 4×4. Trivial
+        to write — but it nails down the mental model the rest of the module leans on: the columns
+        of any transform are <em>where its frame's axes point</em>, and the last column is
+        <em>where its origin sits</em>. Read a matrix that way and it stops being a grid of numbers
+        and becomes a little coordinate system you can see.
+      </p>
+      <p class="hook">
+        Every prop, character and bullet in a game scene is an <code>frameMatrix</code> the engine
+        rebuilds each frame from the object's transform. "Attach the sword to the hand bone" is
+        literally "use the hand's frame matrix as the sword's parent" — the capstone of Module 3,
+        seen from the other side.
+      </p>
+
+      <div data-widget="space-frames" data-driven-by="04/frame"></div>
+      <div data-exercise="04/frame"></div>
+
+      <!-- ============================== 4.2 ============================== -->
+      <h2 id="s42"><span class="secnum">4.2</span> Change of basis: reading a point in another frame</h2>
+
+      <p>
+        <code>frameMatrix</code> goes local → world. Now run it backwards: given a point's world
+        coordinates, what are its coordinates <em>in some other frame</em>? This is the operation
+        a camera performs on the entire world, so it's worth doing slowly and by hand once.
+      </p>
+      <p>
+        For a frame that's <strong>orthonormal</strong> — axes that are unit length and mutually
+        perpendicular, which every rotation gives you — the answer is gorgeous. Slide the point so
+        the frame's origin becomes <em>your</em> origin (subtract $o$), then ask "how far along each
+        axis?" And "how far along a unit vector" is a question you answered in Module 2: it's the
+        <em>dot product</em>.
+      </p>
+      $$
+      p_{\text{local}} = \big(\, (p - o)\cdot\hat{x},\;\; (p - o)\cdot\hat{y},\;\; (p - o)\cdot\hat{z} \,\big)
+      $$
+      <p class="insight">
+        Change of basis into an orthonormal frame is three dot products. No matrix inverse, no
+        solving equations — projection onto each axis reads off that coordinate directly. This is
+        why orthonormal frames are worth their weight in gold, and why cameras are built from them.
+      </p>
+      <p>
+        Sanity check the round trip: <code>frameMatrix</code> rebuilds a point as
+        $o + l_x\hat{x} + l_y\hat{y} + l_z\hat{z}$, and <code>worldToLocal</code> recovers
+        $(l_x, l_y, l_z)$ from the point. They undo each other exactly — the widget draws that
+        reconstruction as a colored staircase that should land dead on the target point. (When the
+        axes are <em>not</em> orthonormal the dot-product trick fails and you really do need a
+        matrix inverse — but we'll never let our frames get into that state.)
+      </p>
+      <p class="warning">
+        The dot-product shortcut is a privilege, not a right: it holds <em>only</em> when the axes
+        are orthonormal. Feed <code>worldToLocal</code> a frame with non-perpendicular or non-unit
+        axes and the numbers it returns are quietly wrong. The next section is how you guarantee you
+        never hand it a bad frame.
+      </p>
+
+      <div data-widget="change-of-basis" data-driven-by="04/change-of-basis"></div>
+      <div data-exercise="04/change-of-basis"></div>
+
+      <!-- ============================== 4.3 ============================== -->
+      <h2 id="s43"><span class="secnum">4.3</span> Manufacturing a frame: the orthonormal basis</h2>
+
+      <p>
+        Here's the practical problem. You want a camera at the eye, looking at a target, with "up"
+        roughly toward the sky. That gives you a <em>forward</em> direction (target minus eye) and a
+        <em>rough up</em> — but those two are almost never perpendicular, and forward probably isn't
+        unit length. You can't build an orthonormal frame from sloppy inputs by wishing. You build
+        it with <strong>Gram-Schmidt</strong>, which here is just two cross products.
+      </p>
+      <p>
+        Watch the logic. <code>cross</code> always returns a vector perpendicular to both its
+        inputs, so $\hat{r} = \text{normalize}(\hat{f} \times \text{up})$ is guaranteed
+        perpendicular to forward — that's your <em>right</em> axis, and the sloppy "up" only had to
+        point roughly the right way to pin down which side is right. Then rebuild a <em>clean</em>
+        up as $\hat{u} = \hat{r} \times \hat{f}$: perpendicular to both, and automatically unit
+        length because it's the cross of two perpendicular unit vectors.
+      </p>
+      $$
+      \hat{f} = \frac{\text{fwd}}{\lVert \text{fwd} \rVert}, \qquad
+      \hat{r} = \frac{\hat{f} \times \text{up}}{\lVert \hat{f} \times \text{up} \rVert}, \qquad
+      \hat{u} = \hat{r} \times \hat{f}
+      $$
+      <p class="insight">
+        Take whatever forward you're given, manufacture a perpendicular right with one cross, then
+        manufacture a perpendicular up with a second cross. Three clean, unit, mutually
+        perpendicular axes out of two messy inputs — that's the entire trick behind every
+        "look in this direction" function in graphics.
+      </p>
+      <p>
+        Order and handedness matter: <code>cross(fwd, up)</code> versus <code>cross(up, fwd)</code>
+        flip right into left, and a left-handed camera frame mirror-images your whole render. The
+        widget reports every dot product (should be $\approx 0$) and every length (should be
+        $\approx 1$) so you can see the frame is genuinely orthonormal, not just close.
+      </p>
+      <p class="warning">
+        One degenerate case lurks: if forward is parallel to up, then $\hat{f} \times \text{up}$ is
+        the zero vector and normalize can't save it — the frame collapses. It's why you can't look
+        straight up with a $(0,1,0)$ up vector, and why the orbit cameras in this course clamp
+        pitch just shy of vertical. Real engines special-case it; we sidestep it.
+      </p>
+
+      <div data-widget="gram-schmidt" data-driven-by="04/orthonormal"></div>
+      <div data-exercise="04/orthonormal"></div>
+
+      <!-- ============================== 4.4 ============================== -->
+      <h2 id="s44"><span class="secnum">4.4</span> lookAt, part 1: placing the camera</h2>
+
+      <p>
+        Now assemble. A camera is a framed object like any other, so its model→world matrix —
+        <code>cameraToWorld</code> — is just <code>frameMatrix</code> fed the camera's frame:
+        the orthonormal basis from 4.3, with the eye as the origin.
+      </p>
+      <p>
+        There's exactly one convention to swallow, and it's the source of a thousand sign-flip bugs.
+        By long-standing tradition (OpenGL, WebGL, and this course), a camera in its own space sits
+        at the origin and <em>looks down its $-z$ axis</em>. So the camera's "forward" — toward the
+        target — is the $-z$ direction, which means the frame's third column, its actual z-axis,
+        points <em>backward</em>, away from what you're looking at. Columns 0, 1, 2 are therefore
+        right, up, and <em>back</em> $= -\hat{f}$:
+      </p>
+      $$
+      \text{cameraToWorld} = \begin{bmatrix}
+      \hat{r} & \hat{u} & -\hat{f} & \text{eye} \\
+      \end{bmatrix}, \qquad \hat{f} = \text{normalize(target} - \text{eye)}
+      $$
+      <p class="insight">
+        The camera looks down $-z$. Internalize that one fact and the rest of graphics stops
+        fighting you: the back axis is $+z$, the projection in Module 5 divides by $-z$, and "in
+        front of the camera" means "negative z." Memorize the convention, not the formula.
+      </p>
+      <p>
+        The widget reads the eye, the red/green/blue axes, and the little view frustum <em>straight
+        out of the matrix you build</em> — column 3 is the eye, columns 0–2 are the axes, and the
+        frustum opens along $-z$ toward the target. Drag the eye around and the camera body follows,
+        because the body <em>is</em> the matrix.
+      </p>
+      <p class="hook">
+        This is the matrix that mounts a camera to a tripod, a car bumper, or a character's eyes.
+        A first-person camera is <code>cameraToWorld</code> with the eye and forward yanked from the
+        player every frame; a cutscene camera is the same matrix keyframed by an animator.
+      </p>
+
+      <div data-widget="camera-rig" data-driven-by="04/camera-to-world"></div>
+      <div data-exercise="04/camera-to-world"></div>
+
+      <!-- ============================== 4.5 ============================== -->
+      <h2 id="s45"><span class="secnum">4.5</span> lookAt, part 2: the cheap rigid inverse</h2>
+
+      <p>
+        Here's the twist that catches everyone. <code>cameraToWorld</code> takes camera-space points
+        out into the world — but rendering needs the opposite: take world points <em>into</em> the
+        camera. That's the inverse, and it has a name you'll see all over graphics code: the
+        <strong>view matrix</strong>. So the view matrix is $\text{cameraToWorld}^{-1}$, and your
+        stomach drops, because inverting a general 4×4 is a miserable 16-term cofactor slog you do
+        not want to write or run per frame.
+      </p>
+      <p>
+        You don't have to — and this is the beautiful shortcut Module 3 promised. The camera matrix
+        isn't general. It's <strong>rigid</strong>: a rotation $R$ (orthonormal — its columns are
+        perpendicular unit vectors) followed by a translation $t$. And a rigid matrix inverts almost
+        for free, because an orthonormal matrix's inverse <em>is its transpose</em>:
+        $R^{-1} = R^{\mathsf{T}}$. No determinant, no division — just reflect across the diagonal.
+      </p>
+      $$
+      M = \begin{bmatrix} R & t \\ 0 & 1 \end{bmatrix}
+      \quad\Longrightarrow\quad
+      M^{-1} = \begin{bmatrix} R^{\mathsf{T}} & -R^{\mathsf{T}}t \\ 0 & 1 \end{bmatrix}
+      $$
+      <p class="insight">
+        For a rigid transform, inverse = transpose the rotation, and re-aim the translation as
+        $-R^{\mathsf{T}}t$. It's $O(1)$, it's exact (no floating-point division to drift), and it's
+        why no engine ever calls a general matrix inverse to build a view matrix.
+      </p>
+      <p>
+        Why $-R^{\mathsf{T}}t$ and not just $-t$? Because undoing $M$ means undoing the translation
+        <em>and then</em> the rotation, in that reversed order: $M^{-1} = R^{-1}T^{-1}$. The
+        $-R^{\mathsf{T}}t$ column is exactly "slide back by $-t$, then rotate that offset by
+        $R^{\mathsf{T}}$." In the homogeneous form, $R^{\mathsf{T}}$ in the upper-left and
+        $-R^{\mathsf{T}}t$ in the last column do both jobs in one matrix. (Convince yourself:
+        column $i$ of $R^{\mathsf{T}}t$ is the dot of $R$'s $i$-th <em>column</em> with $t$ — which
+        is why the formula reads off $m_0, m_1, m_2$ for the first entry, not $m_0, m_4, m_8$.)
+      </p>
+      <p>
+        Build <code>invertRigid</code>, then <code>lookAt</code> is a one-liner:
+        $\text{lookAt} = \text{invertRigid}(\text{cameraToWorld})$. The widget scrambles a cube with
+        a rigid $M$ and asks your inverse to put it back; the readout multiplies $M^{-1}M$ and shows
+        it collapsing to the identity. If your cube doesn't come home, you transposed wrong or
+        forgot the $-R^{\mathsf{T}}t$ re-aim.
+      </p>
+      <p class="warning">
+        The transpose shortcut works <em>only</em> while the rotation stays orthonormal. The moment
+        a non-uniform scale sneaks into your "rigid" matrix (Module 3's normals warning, again), the
+        columns stop being unit length, the transpose stops being the inverse, and your camera
+        silently skews. View matrices are rotation-and-translation only — keep scale out.
+      </p>
+
+      <div data-widget="rigid-inverse" data-driven-by="04/view-matrix"></div>
+      <div data-exercise="04/view-matrix"></div>
+
+      <!-- ============================ capstone ============================ -->
+      <h2 id="capstone"><span class="secnum">★</span> Capstone: fly the camera</h2>
+
+      <p>
+        Time to collapse the whole module into one chain. A vertex starts in <strong>model
+        space</strong>, gets placed in the <strong>world</strong> by its model matrix, and lands in
+        <strong>view space</strong> via your view matrix — and because chains read right-to-left,
+        the single matrix that does all of it at once is
+        $\text{modelView} = \text{lookAt} \cdot \text{model}$.
+      </p>
+      <p class="insight">
+        Model first, view second: $\text{view} \cdot \text{model}$. The object's own transform runs
+        before the camera's, exactly as you'd expect — put the teapot on the table, <em>then</em>
+        decide where you're standing to look at it. Every vertex in every frame of every 3D game
+        flows through some version of this product.
+      </p>
+      <p>
+        Your <code>modelView</code> below builds that matrix, and the widget makes it literal. The
+        left panel is a free orbit view of the world with your camera drawn as a frustum — that's
+        the camera you're flying. The right panel renders the <em>same</em> world as that camera
+        sees it, by pushing every object through your <code>modelView</code>. Fly the camera with
+        the sliders and the two panels stay locked together: turn left in the world, the world
+        swings right through the lens. Get <code>lookAt</code> wrong and the right panel lurches the
+        wrong way while the frustum on the left stays honest — the cleanest bug-finder in the course.
+      </p>
+      <p class="convention">
+        Full honesty about the right panel: turning view-space coordinates into a flat image still
+        needs the <em>perspective divide</em> — the "things farther away look smaller" squish. That
+        last black box is the only piece of the rendering pipeline you haven't built yourself, and
+        it's the entire subject of Module 5. Everything else on screen — every axis, every cube,
+        every line of the world-to-camera transform — is now your code.
+      </p>
+      <p class="hook">
+        You've reached a milestone the course has been building toward since Module 1: the camera
+        that draws these diagrams is no longer a black box you were promised would be explained. You
+        wrote it. Module 5 takes the last step — the projection — and then the renderer drawing
+        every picture on this page is made entirely of functions you built.
+      </p>
+
+      <div data-widget="fly-the-camera" data-driven-by="04/fly-camera"></div>
+      <div data-exercise="04/fly-camera"></div>
+
+      <p>
+        One thread forward. Your <code>modelView</code> hands view space to a projection you haven't
+        written — the perspective divide that maps a 3D frustum onto a 2D rectangle and makes
+        distance shrink things. That's the projection matrix, normalized device coordinates, and the
+        viewport transform: Module 5, where <code>project3()</code> finally stops being a black box
+        and becomes the last matrix in your pipeline.
+      </p>
+    </main>
+  </body>
+</html>

@@ -115,3 +115,44 @@ export const mul4 = (a: Mat4, b: Mat4): Mat4 => {
   }
   return out as unknown as Mat4
 }
+
+/**
+ * Exercise 04/frame — assemble a coordinate frame into a Mat4: the three axes
+ * become columns 0–2, the origin becomes column 3. This IS a model→world
+ * matrix; transformPoint3 then maps local coordinates into the world.
+ */
+// prettier-ignore
+export const frameMatrix = (x: Vec3, y: Vec3, z: Vec3, o: Vec3): Mat4 => [
+  x.x, x.y, x.z, 0,
+  y.x, y.y, y.z, 0,
+  z.x, z.y, z.z, 0,
+  o.x, o.y, o.z, 1,
+]
+
+/** Flip a matrix across its diagonal — rows become columns. */
+// prettier-ignore
+export const transpose4 = (m: Mat4): Mat4 => [
+  m[0], m[4], m[8], m[12],
+  m[1], m[5], m[9], m[13],
+  m[2], m[6], m[10], m[14],
+  m[3], m[7], m[11], m[15],
+]
+
+/**
+ * Exercise 04/view-matrix — the cheap inverse of a rigid (rotation +
+ * translation) transform. For an orthonormal rotation R the inverse is its
+ * transpose Rᵀ; the translation becomes −Rᵀ·t. No general 4×4 inverse needed.
+ */
+// prettier-ignore
+export const invertRigid = (m: Mat4): Mat4 => {
+  const tx = m[12], ty = m[13], tz = m[14]
+  return [
+    m[0], m[4], m[8], 0,
+    m[1], m[5], m[9], 0,
+    m[2], m[6], m[10], 0,
+    -(m[0] * tx + m[1] * ty + m[2] * tz),
+    -(m[4] * tx + m[5] * ty + m[6] * tz),
+    -(m[8] * tx + m[9] * ty + m[10] * tz),
+    1,
+  ]
+}

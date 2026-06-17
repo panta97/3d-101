@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { v2, v3, m2, m3, m4, pl } from '../src/math'
+import { v2, v3, m2, m3, m4, pl, cam } from '../src/math'
 import type { Vec2, Vec3 } from '../src/math'
 
 const EPS = 1e-6
@@ -287,5 +287,66 @@ describe('mat4', () => {
       ),
       2,
     )
+  })
+
+  it('frameMatrix packs axes into columns, origin into column 3', () => {
+    const m = m4.frameMatrix(v3.vec3(0, 0, -1), v3.vec3(0, 1, 0), v3.vec3(1, 0, 0), v3.vec3(5, 0, 0))
+    nearArr(m, [0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 5, 0, 0, 1])
+    near3(m4.transformPoint3(m, v3.vec3(1, 0, 0)), { x: 5, y: 0, z: -1 })
+  })
+
+  it('transpose4 reflects across the diagonal', () => {
+    const ry = m4.rotationY(0.7)
+    nearArr(m4.transpose4(m4.transpose4(ry)), ry as unknown as number[])
+  })
+
+  it('invertRigid undoes translation and rotation; M⁻¹·M = I', () => {
+    nearArr(m4.invertRigid(m4.translation3(1, 2, 3)), [
+      1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -1, -2, -3, 1,
+    ])
+    nearArr(m4.invertRigid(m4.rotationY(Math.PI / 2)), m4.rotationY(-Math.PI / 2) as unknown as number[])
+    const M = m4.mul4(m4.translation3(2, -1, 4), m4.rotationY(0.9))
+    nearArr(m4.mul4(m4.invertRigid(M), M), m4.identity4() as unknown as number[])
+  })
+})
+
+describe('camera / coordinate frames (module 4)', () => {
+  it('orthonormalBasis squares up sloppy inputs', () => {
+    const b = cam.orthonormalBasis(v3.vec3(1, 0, 0), v3.vec3(0.3, 1, 0))
+    near3(b.right, { x: 0, y: 0, z: 1 })
+    near3(b.up, { x: 0, y: 1, z: 0 })
+    near3(b.fwd, { x: 1, y: 0, z: 0 })
+    // orthonormality from an arbitrary input
+    const c = cam.orthonormalBasis(v3.vec3(2, -1, 4), v3.vec3(0, 1, 0))
+    near(v3.dot(c.right, c.up), 0)
+    near(v3.dot(c.right, c.fwd), 0)
+    near(v3.length(c.right), 1)
+    near(v3.length(c.fwd), 1)
+  })
+
+  it('worldToLocal is the inverse of frameMatrix for orthonormal frames', () => {
+    const x = v3.vec3(0, 0, -1)
+    const y = v3.vec3(0, 1, 0)
+    const z = v3.vec3(1, 0, 0)
+    const o = v3.vec3(5, 0, 0)
+    const local = v3.vec3(2, -3, 4)
+    const world = m4.transformPoint3(m4.frameMatrix(x, y, z, o), local)
+    near3(cam.worldToLocal(o, x, y, z, world), local)
+  })
+
+  it('cameraToWorld places the eye and looks down −z', () => {
+    const c = cam.cameraToWorld(v3.vec3(0, 0, 5), v3.vec3(0, 0, 0), v3.vec3(0, 1, 0))
+    nearArr(c, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 5, 1])
+    near3(m4.transformPoint3(c, v3.vec3(0, 0, 0)), { x: 0, y: 0, z: 5 })
+    near3(m4.transformDir3(c, v3.vec3(0, 0, -1)), { x: 0, y: 0, z: -1 })
+  })
+
+  it('lookAt = inverse of cameraToWorld: eye→origin, target→(0,0,−dist)', () => {
+    const view = cam.lookAt(v3.vec3(0, 0, 5), v3.vec3(0, 0, 0), v3.vec3(0, 1, 0))
+    nearArr(view, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -5, 1])
+    near3(m4.transformPoint3(view, v3.vec3(0, 0, 5)), { x: 0, y: 0, z: 0 })
+    near3(m4.transformPoint3(view, v3.vec3(0, 0, 0)), { x: 0, y: 0, z: -5 })
+    const side = cam.lookAt(v3.vec3(5, 0, 0), v3.vec3(0, 0, 0), v3.vec3(0, 1, 0))
+    near3(m4.transformPoint3(side, v3.vec3(0, 0, 0)), { x: 0, y: 0, z: -5 })
   })
 })

@@ -20,6 +20,7 @@ const MODULES = [
   { path: '/modules/01-vectors/', exercises: 7 },
   { path: '/modules/02-dot-cross-planes/', exercises: 7 },
   { path: '/modules/03-matrices/', exercises: 8 },
+  { path: '/modules/04-coordinate-spaces-camera/', exercises: 6 },
 ]
 
 const browser = await chromium.launch()
@@ -92,7 +93,7 @@ for (const mod of MODULES) {
 // Home page nav links resolve.
 await page.goto(`${base}/`, { waitUntil: 'networkidle' })
 check('home TOC renders 12 modules', (await page.locator('.toc-item').count()) === 12)
-check('3 modules linked', (await page.locator('.toc-item > a').count()) === 3)
+check('4 modules linked', (await page.locator('.toc-item > a').count()) === 4)
 
 await browser.close()
 console.log('')

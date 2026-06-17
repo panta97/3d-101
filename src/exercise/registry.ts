@@ -8,8 +8,14 @@ import type { ExerciseSpec } from './types'
 import { M01_EXERCISES } from '@/content/exercises/m01'
 import { M02_EXERCISES } from '@/content/exercises/m02'
 import { M03_EXERCISES } from '@/content/exercises/m03'
+import { M04_EXERCISES } from '@/content/exercises/m04'
 
-const all: ExerciseSpec[] = [...M01_EXERCISES, ...M02_EXERCISES, ...M03_EXERCISES]
+const all: ExerciseSpec[] = [
+  ...M01_EXERCISES,
+  ...M02_EXERCISES,
+  ...M03_EXERCISES,
+  ...M04_EXERCISES,
+]
 
 const byId = new Map<string, ExerciseSpec>()
 for (const spec of all) {

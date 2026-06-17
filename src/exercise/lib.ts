@@ -7,7 +7,7 @@
  * (add3, dot3, reflect3, …) — except `cross`, which is inherently 3D.
  */
 
-import { v2, v3, m2, m3, m4, pl } from '@/math'
+import { v2, v3, m2, m3, m4, pl, cam } from '@/math'
 import type { Lib } from './types'
 
 export const LIB: Lib = {
@@ -84,6 +84,15 @@ export const LIB: Lib = {
   scaling3: m4.scaling3,
   transformPoint3: m4.transformPoint3,
   transformDir3: m4.transformDir3,
+  frameMatrix: m4.frameMatrix,
+  transpose4: m4.transpose4,
+  invertRigid: m4.invertRigid,
+
+  // camera / coordinate frames (mod 4)
+  orthonormalBasis: cam.orthonormalBasis,
+  worldToLocal: cam.worldToLocal,
+  cameraToWorld: cam.cameraToWorld,
+  lookAt: cam.lookAt,
 }
 
 /** Subset of LIB named by a spec's `provides`, for scope injection. */

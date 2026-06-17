@@ -29,7 +29,7 @@ export const TOC: TocEntry[] = [
   },
   {
     num: 4,
-    slug: null,
+    slug: '04-coordinate-spaces-camera',
     title: 'Coordinate Spaces & the Camera',
     blurb: 'Model, world and view space; change of basis; cheap rigid inverses; lookAt.',
   },
