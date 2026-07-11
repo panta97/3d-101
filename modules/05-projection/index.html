@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Module 5 — Projection: 3D onto the Screen · 3d-101</title>
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body>
+    <main class="prose">
+      <h1>Projection: 3D onto the Screen</h1>
+      <p class="subtitle">
+        The perspective divide, the projection matrix, normalized device coordinates, the viewport
+        transform — <code>project3()</code> finally demystified.
+      </p>
+
+      <p>
+        For four modules a single function has done all the heavy lifting and refused to explain
+        itself. <code>project3()</code> took a 3D point and handed back a pixel, and every diagram you
+        have ever dragged was secretly calling it. Module 4 ended one step away: you built the whole
+        model → world → view chain yourself, and the only black box left was the last squish — the one
+        that makes far things small and turns a 3D world into a flat image. This module is that squish.
+      </p>
+      <p>
+        It comes apart into surprisingly few pieces. There is one genuinely new idea —
+        <em>dividing by depth</em> — and then a lot of bookkeeping to do that division with a matrix
+        and map the result onto a rectangle of pixels. By the end you will have rebuilt
+        <code>project3()</code> from scratch, and the renderer drawing every picture on every page of
+        this course will be made entirely of functions you wrote.
+      </p>
+
+      <!-- ============================== 5.1 ============================== -->
+      <h2 id="s51"><span class="secnum">5.1</span> The perspective divide</h2>
+
+      <p>
+        Hold a finger up close and it blots out a building. Perspective is just the observation that
+        the same object covers less of your view the farther away it sits — and the math is
+        embarrassingly simple. Put the eye at the origin looking down $-z$ (the convention from Module
+        4). A point sits at camera-space $(x, y, z)$, at depth $d = -z$ in front of you. Drop an
+        <em>image plane</em> a distance $f$ (the focal length) ahead. The ray from the point back to
+        the eye pierces that plane, and similar triangles read off where:
+      </p>
+      $$
+      x' = f\,\frac{x}{-z}, \qquad y' = f\,\frac{y}{-z}
+      $$
+      <p class="insight">
+        Projection is division by depth. That single $/(-z)$ is the entire reason distant things look
+        small — double the depth, halve the image. Everything else in this module is machinery for
+        doing that one division cleanly and turning the result into pixels.
+      </p>
+      <p>
+        Your <code>projectPinhole</code> below is that formula and nothing more. The widget draws the
+        eye, the image plane, and your point; the red dot is where your function lands it. Slide the
+        point deeper and watch it shrink toward the center; the dot must stay glued to the sight ray,
+        because that ray <em>is</em> the set of all points that project to the same spot.
+      </p>
+      <p class="warning">
+        Depth is $-z$, not $z$. The camera looks down $-z$, so a visible point has a
+        <em>negative</em> $z$ and a positive depth. Divide by $z$ instead of $-z$ and your whole image
+        flips through the origin — the single most common sign bug in graphics.
+      </p>
+
+      <div data-widget="pinhole" data-driven-by="05/perspective-divide"></div>
+      <div data-exercise="05/perspective-divide"></div>
+
+      <!-- ============================== 5.2 ============================== -->
+      <h2 id="s52"><span class="secnum">5.2</span> The projection matrix</h2>
+
+      <p>
+        You divide by depth in one line — so why does every engine wrap projection in a 4×4 matrix?
+        Because the rest of the pipeline is matrices, and a matrix can be premultiplied into the
+        model-view product so a vertex takes <em>one</em> transform, not a transform followed by a
+        special-case divide. But there is a catch you can already feel: a matrix multiply is
+        <em>linear</em> — it can add and scale coordinates, but it cannot divide one coordinate by
+        another. So how can a matrix do the perspective divide?
+      </p>
+      <p class="insight">
+        It doesn't — it <em>defers</em> it. The projection matrix is built so the output's fourth
+        coordinate $w$ comes out equal to $-z$ (the depth). The division by $w$ happens in the next
+        step, on its own. The matrix's only job is to load the right number into $w$ and pre-scale
+        $x, y, z$ so that after the divide everything lands in a tidy cube.
+      </p>
+      <p>
+        That tidy cube is the point. The matrix maps the camera's <strong>view frustum</strong> — the
+        truncated pyramid of everything it can see, bounded by a field of view and the near/far
+        planes — onto a canonical $[-1, 1]^3$ box. Here is the standard perspective matrix, with
+        $f = 1/\tan(\text{fovY}/2)$:
+      </p>
+      $$
+      P = \begin{bmatrix}
+      \dfrac{f}{\text{aspect}} & 0 & 0 & 0 \\[4pt]
+      0 & f & 0 & 0 \\[4pt]
+      0 & 0 & \dfrac{\text{far}+\text{near}}{\text{near}-\text{far}} & \dfrac{2\,\text{far}\,\text{near}}{\text{near}-\text{far}} \\[4pt]
+      0 & 0 & -1 & 0
+      \end{bmatrix}
+      $$
+      <p>
+        Read the rows. The top two scale $x$ and $y$ by the focal length (and undo the aspect ratio
+        on $x$ so a wide canvas doesn't stretch the picture). The third row remaps depth into the
+        $[-1, 1]$ range. And the bottom row is the whole trick: $(0, 0, -1, 0)$ means the output
+        $w = -z$. That $-1$ is the most important number in the matrix.
+      </p>
+      <p class="convention">
+        Storage reminder: this is column-major, like every Mat4 since Module 3. The $-1$ that copies
+        $-z$ into $w$ lives at index <code>m[11]</code>, and the depth-remap terms are
+        <code>m[10]</code> and <code>m[14]</code>. The starter spells out every index so you can drop
+        the values straight in.
+      </p>
+      <p class="hook">
+        Change the field of view on a real camera and you get a zoom lens; change it here and you are
+        editing <code>f</code> in this exact matrix. The "dolly zoom" that makes hallways stretch in
+        thrillers is an animator sliding fovY and the eye in opposite directions, frame by frame.
+      </p>
+
+      <div data-widget="frustum" data-driven-by="05/projection-matrix"></div>
+      <div data-exercise="05/projection-matrix"></div>
+
+      <!-- ============================== 5.3 ============================== -->
+      <h2 id="s53"><span class="secnum">5.3</span> Clip space and the perspective divide</h2>
+
+      <p>
+        Now apply the matrix. Back in Module 3 you wrote <code>transformPoint3</code>, and it quietly
+        cheated: it computed three output coordinates and ignored the matrix's bottom row, because for
+        every transform you had built so far the fourth coordinate $w$ was always $1$. The projection
+        matrix breaks that assumption on purpose — it puts $-z$ in the bottom row — so you need the
+        honest version that keeps $w$.
+      </p>
+      $$
+      \begin{bmatrix} x_c \\ y_c \\ z_c \\ w_c \end{bmatrix}
+      = P \begin{bmatrix} x \\ y \\ z \\ 1 \end{bmatrix},
+      \qquad w_c = -z
+      $$
+      <p>
+        The result $(x_c, y_c, z_c, w_c)$ lives in <strong>clip space</strong> — named because the GPU
+        clips triangles against the cube here, while $w$ is still around to make the math linear. Then
+        comes the moment everything has been building toward, the <strong>perspective divide</strong>:
+        divide all four coordinates through by $w$.
+      </p>
+      $$
+      \text{NDC} = \left( \frac{x_c}{w_c},\; \frac{y_c}{w_c},\; \frac{z_c}{w_c} \right)
+      $$
+      <p class="insight">
+        The divide by $w$ <em>is</em> the divide by depth from 5.1 — you just routed the depth through
+        $w$ so a linear matrix could carry it this far. After it, every on-screen point lives in
+        <strong>normalized device coordinates</strong>: a resolution-independent $[-1, 1]^3$ cube,
+        $-1$ at left/bottom/near, $+1$ at right/top/far.
+      </p>
+      <p>
+        Build <code>transformPoint4</code> (transformPoint3 with the bottom row restored) and
+        <code>perspectiveDivide</code> (three divisions). The widget shows a point in view space on
+        the left and its NDC landing spot on the right; the readout prints the full clip-space
+        4-vector so you can watch $w$ track the depth and the divide squeeze deeper points harder
+        toward the center.
+      </p>
+
+      <div data-widget="clip-space" data-driven-by="05/clip-space"></div>
+      <div data-exercise="05/clip-space"></div>
+
+      <!-- ============================== 5.4 ============================== -->
+      <h2 id="s54"><span class="secnum">5.4</span> The viewport transform: NDC to pixels</h2>
+
+      <p>
+        NDC is almost a picture — it just doesn't know your canvas. It's a $2 \times 2$ square centered
+        on the origin; your canvas is a <code>width</code> × <code>height</code> rectangle whose origin
+        is the top-left corner and whose $y$ grows <em>downward</em>. The <strong>viewport
+        transform</strong> is the last, humblest step: remap each axis and flip $y$.
+      </p>
+      $$
+      x_{\text{px}} = \frac{x_{\text{ndc}} + 1}{2}\,\text{width}, \qquad
+      y_{\text{px}} = \frac{1 - y_{\text{ndc}}}{2}\,\text{height}
+      $$
+      <p class="warning">
+        The $y$-flip catches everyone. Math and NDC put $+y$ up; screens and canvases put $+y$ down.
+        Forget the $(1 - y_{\text{ndc}})$ and your render is upside-down — perfectly rendered, then
+        mirrored top-to-bottom. It is the bug that makes a debugged scene look haunted.
+      </p>
+      <p>
+        Your <code>viewport</code> is two lines, but it is where the whole pipeline finally touches the
+        screen. The widget treats the entire canvas as the viewport: drag anywhere, watch the spot
+        reported as an NDC coordinate, and see your function place the pixel. The corner labels make
+        the flip concrete — NDC's top-left maps to pixel $(0, 0)$, its bottom-left to $(0,
+        \text{height})$.
+      </p>
+
+      <div data-widget="viewport" data-driven-by="05/viewport"></div>
+      <div data-exercise="05/viewport"></div>
+
+      <!-- ============================== 5.5 ============================== -->
+      <h2 id="s55"><span class="secnum">5.5</span> Orthographic: projection without the divide</h2>
+
+      <p>
+        Not every projection foreshortens. CAD drawings, architectural blueprints, and isometric
+        strategy games deliberately throw perspective away so that a one-meter beam is one meter long
+        wherever it sits — measurable, comparable, honest about size. That's
+        <strong>orthographic</strong> projection, and the contrast pins down exactly what perspective
+        was doing.
+      </p>
+      <p class="insight">
+        Orthographic keeps $w = 1$. Its bottom row is the ordinary $(0, 0, 0, 1)$, so the perspective
+        divide divides by one and changes nothing. No depth in the denominator means no shrinking with
+        distance — parallel lines stay parallel forever.
+      </p>
+      $$
+      O = \begin{bmatrix}
+      \dfrac{2}{\text{width}} & 0 & 0 & 0 \\[4pt]
+      0 & \dfrac{2}{\text{height}} & 0 & 0 \\[4pt]
+      0 & 0 & \dfrac{-2}{\text{far}-\text{near}} & -\dfrac{\text{far}+\text{near}}{\text{far}-\text{near}} \\[4pt]
+      0 & 0 & 0 & 1
+      \end{bmatrix}
+      $$
+      <p>
+        It's the same job as perspective — map a viewing volume onto the NDC cube — but the volume is
+        now a <em>box</em>, not a frustum, so the matrix is pure scale-and-shift with no $-1$ in the
+        $w$ row. The widget renders one row of identical cubes twice: through a perspective matrix on
+        the left (the far ones shrink) and through your <code>orthographic</code> on the right (they
+        stay dead equal). Seeing both at once is the clearest possible statement of what that single
+        division buys you.
+      </p>
+
+      <div data-widget="ortho-compare" data-driven-by="05/orthographic"></div>
+      <div data-exercise="05/orthographic"></div>
+
+      <!-- ============================ capstone ============================ -->
+      <h2 id="capstone"><span class="secnum">★</span> Capstone: <code>project3()</code> un-boxed</h2>
+
+      <p>
+        Everything assembles into the function the course has leaned on since Module 1. A vertex starts
+        in model space and rides a single matrix — projection · view · model — into clip space; you
+        keep its $w$, divide to NDC, and map to a pixel. That's <code>project3()</code>, and now you
+        write it:
+      </p>
+      $$
+      \text{pixel} = \text{viewport}\Big( \text{perspectiveDivide}\big( \,
+      (P \cdot V \cdot M)\,\mathbf{p}\, \big) \Big)
+      $$
+      <p class="insight">
+        One matrix, one divide, one remap — with a guard. Points at or behind the eye have $w \le 0$
+        and no honest place on screen, so <code>project3</code> returns null for them and the renderer
+        simply skips those edges. That cull is why a wall behind the camera doesn't smear across your
+        view.
+      </p>
+      <p>
+        The widget renders a real scene of cubes <em>entirely</em> through your <code>project3</code>:
+        every edge, every grid line, every axis is your pipeline running on live data. Orbit the
+        camera, widen the field of view, and the picture responds because the math is yours — the
+        perspective divide you derived in 5.1, the matrix from 5.2, the clip-to-NDC of 5.3, the
+        viewport of 5.4, all firing at once.
+      </p>
+      <p class="hook">
+        This is the last black box gone. The orbit camera that drew the vectors in Module 1, the
+        planes in Module 2, the matrices in Module 3, the lookAt frustum in Module 4 — all of it was
+        <code>project3()</code>, and you have now built every line of it. From here on the course adds
+        new powers (triangles, light, textures, ray tracing), but the machine that turns a 3D point
+        into a pixel on your screen is, start to finish, your code.
+      </p>
+
+      <div data-widget="full-pipeline" data-driven-by="05/project3"></div>
+      <div data-exercise="05/project3"></div>
+
+      <p>
+        One thread forward. You can now place a 3D point precisely on the screen — but a scene is made
+        of <em>triangles</em>, not points, and the screen is made of pixels you have to fill. Module 6
+        is rasterization: edge functions (your old friend <code>cross2</code> returns), barycentric
+        coordinates, the z-buffer that decides what's in front, and backface culling. The projector is
+        built; next you learn to paint between the projected points.
+      </p>
+    </main>
+  </body>
+</html>

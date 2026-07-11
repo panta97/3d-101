@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { v2, v3, m2, m3, m4, pl, cam } from '../src/math'
+import { v2, v3, m2, m3, m4, pl, cam, proj } from '../src/math'
 import type { Vec2, Vec3 } from '../src/math'
 
 const EPS = 1e-6
@@ -348,5 +348,74 @@ describe('camera / coordinate frames (module 4)', () => {
     near3(m4.transformPoint3(view, v3.vec3(0, 0, 0)), { x: 0, y: 0, z: -5 })
     const side = cam.lookAt(v3.vec3(5, 0, 0), v3.vec3(0, 0, 0), v3.vec3(0, 1, 0))
     near3(m4.transformPoint3(side, v3.vec3(0, 0, 0)), { x: 0, y: 0, z: -5 })
+  })
+})
+
+describe('projection (module 5)', () => {
+  const HALF_PI = Math.PI / 2
+
+  it('projectPinhole divides by depth (similar triangles)', () => {
+    near2(proj.projectPinhole(v3.vec3(0, 0, -5), 1), { x: 0, y: 0 })
+    near2(proj.projectPinhole(v3.vec3(2, 3, -1), 1), { x: 2, y: 3 })
+    // twice as deep → half the image
+    near2(proj.projectPinhole(v3.vec3(2, 3, -2), 1), { x: 1, y: 1.5 })
+    // focal scales the whole image
+    near2(proj.projectPinhole(v3.vec3(2, 3, -2), 4), { x: 4, y: 6 })
+  })
+
+  it('perspective is the gluPerspective matrix with −1 in the w row', () => {
+    nearArr(proj.perspective(HALF_PI, 1, 1, 3), [
+      1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -2, -1, 0, 0, -3, 0,
+    ])
+    const m = proj.perspective(HALF_PI, 2, 1, 3)
+    near(m[0], 0.5) // x divided by aspect
+    near(m[5], 1) // y untouched by aspect
+    near(m[11], -1) // copies −z into w
+    near(m[15], 0)
+  })
+
+  it('transformPoint4 keeps w; perspectiveDivide collapses to NDC', () => {
+    const id = m4.identity4()
+    const a = proj.transformPoint4(id, v3.vec3(2, 3, 4))
+    expect([a.x, a.y, a.z, a.w]).toEqual([2, 3, 4, 1])
+    // a (0,0,−1,0) bottom row drops −z into w
+    const b = proj.transformPoint4([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, -1, 0, 0, 0, 0], v3.vec3(2, 3, -5))
+    near(b.w, 5)
+    near3(proj.perspectiveDivide({ x: 4, y: 6, z: 8, w: 2 }), { x: 2, y: 3, z: 4 })
+  })
+
+  it('perspective maps the near plane to NDC z = −1 and far to +1', () => {
+    const P = proj.perspective(HALF_PI, 1, 1, 3)
+    near(proj.perspectiveDivide(proj.transformPoint4(P, v3.vec3(0, 0, -1))).z, -1)
+    near(proj.perspectiveDivide(proj.transformPoint4(P, v3.vec3(0, 0, -3))).z, 1)
+    // an off-axis point: x = 1 at depth 2 lands at NDC x = 0.5 (the divide)
+    near(proj.perspectiveDivide(proj.transformPoint4(P, v3.vec3(1, 0, -2))).x, 0.5)
+  })
+
+  it('viewport maps NDC onto pixels and flips y', () => {
+    near2(proj.viewport(v3.vec3(0, 0, 0), 800, 600), { x: 400, y: 300 })
+    near2(proj.viewport(v3.vec3(-1, -1, 0), 800, 600), { x: 0, y: 600 })
+    near2(proj.viewport(v3.vec3(1, 1, 0), 800, 600), { x: 800, y: 0 })
+    near2(proj.viewport(v3.vec3(0.5, -0.5, 0), 400, 200), { x: 300, y: 150 })
+  })
+
+  it('orthographic keeps w = 1 and does not foreshorten', () => {
+    nearArr(proj.orthographic(4, 2, 1, 3), [
+      0.5, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 0, -2, 1,
+    ])
+    const O = proj.orthographic(4, 2, 1, 3)
+    // same x at two depths → identical NDC x (parallel, no shrink)
+    near(proj.perspectiveDivide(proj.transformPoint4(O, v3.vec3(2, 0, -1))).x, 1)
+    near(proj.perspectiveDivide(proj.transformPoint4(O, v3.vec3(2, 0, -2.9))).x, 1)
+  })
+
+  it('project3 runs the whole pipeline and culls behind the camera', () => {
+    const P = proj.perspective(HALF_PI, 1, 1, 10)
+    near2(proj.project3(P, v3.vec3(0, 0, -2), 800, 600)!, { x: 400, y: 300 })
+    near2(proj.project3(P, v3.vec3(1, 0, -2), 800, 600)!, { x: 600, y: 300 })
+    expect(proj.project3(P, v3.vec3(0, 0, 5), 800, 600)).toBeNull()
+    // full chain projection · view: the look-at target lands dead center
+    const view = cam.lookAt(v3.vec3(0, 0, 5), v3.vec3(0, 0, 0), v3.vec3(0, 1, 0))
+    near2(proj.project3(m4.mul4(P, view), v3.vec3(0, 0, 0), 800, 600)!, { x: 400, y: 300 })
   })
 })

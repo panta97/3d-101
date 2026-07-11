@@ -35,7 +35,7 @@ export const TOC: TocEntry[] = [
   },
   {
     num: 5,
-    slug: null,
+    slug: '05-projection',
     title: 'Projection: 3D onto the Screen',
     blurb: 'The perspective divide, the projection matrix, NDC, viewport — project3() demystified.',
   },
