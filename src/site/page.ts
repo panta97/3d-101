@@ -157,6 +157,11 @@ export function initPage(opts: PageOptions = {}): void {
   const footerNav = buildFooterNav(opts)
   if (footerNav) document.body.append(footerNav)
 
+  // The Lezer parser is only loaded on pages that actually contain a code block.
+  if (document.querySelector('.prose pre > code')) {
+    void import('./highlight').then(({ highlightCodeBlocks }) => highlightCodeBlocks())
+  }
+
   // KaTeX is only loaded on pages that actually contain TeX.
   if (document.body.textContent?.includes('$')) {
     void Promise.all([

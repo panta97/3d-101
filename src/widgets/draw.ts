@@ -61,6 +61,39 @@ export function drawLabel(
   ctx.restore()
 }
 
+/**
+ * Label centered on the screen segment a→b and rotated to lie along it, so a
+ * long label never cuts across the line it annotates. `offset` nudges it
+ * perpendicular, on the side of `toward` when that point is given. Both a and
+ * b are screen-space (already through `vp.toScreen`).
+ */
+export function drawLabelAlong(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  a: Vec2,
+  b: Vec2,
+  opts: { offset?: number; toward?: Vec2; color?: string } = {},
+): void {
+  let dir = v2.normalize(v2.sub(b, a))
+  if (dir.x === 0 && dir.y === 0) return
+  if (dir.x < 0) dir = v2.scale(dir, -1) // keep the text upright, never mirrored
+  const mid = v2.lerp(a, b, 0.5)
+
+  let perp = v2.vec2(-dir.y, dir.x)
+  if (opts.toward && v2.dot(perp, v2.sub(opts.toward, mid)) < 0) perp = v2.scale(perp, -1)
+  const at = v2.add(mid, v2.scale(perp, opts.offset ?? 0))
+
+  ctx.save()
+  ctx.font = MONO_FONT
+  ctx.fillStyle = opts.color ?? COLORS.fg
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.translate(at.x, at.y)
+  ctx.rotate(Math.atan2(dir.y, dir.x))
+  ctx.fillText(text, 0, 0)
+  ctx.restore()
+}
+
 /* ------------------------------- 2D ------------------------------- */
 
 /** Unit grid with brighter axes. */

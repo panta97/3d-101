@@ -174,6 +174,44 @@ body {
   font-size: inherit;
 }
 
+/* Token colors for highlighted code blocks (see site/highlight.ts). Same
+   one-dark hues as the CodeMirror editor, drawn from the palette above. */
+
+.tok-keyword {
+  color: var(--purple);
+}
+.tok-def {
+  color: var(--accent);
+}
+.tok-fn {
+  color: var(--accent);
+}
+.tok-type {
+  color: var(--yellow);
+}
+.tok-prop {
+  color: var(--red);
+}
+.tok-number {
+  color: #d19a66;
+}
+.tok-string {
+  color: var(--green);
+}
+.tok-comment {
+  color: var(--fg-dim);
+  font-style: italic;
+}
+.tok-operator {
+  color: var(--cyan);
+}
+.tok-punct {
+  color: var(--fg-dim);
+}
+.tok-builtin {
+  color: var(--red);
+}
+
 .prose figure {
   margin: 1.6rem 0;
 }

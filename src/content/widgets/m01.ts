@@ -332,19 +332,55 @@ const scaleLength: WidgetFactory = (container) => {
       const corner = v2.vec2(sv.x, 0)
       draw.line2(ctx, vp, O, corner, { color: COLORS.red, width: 1.5, dash: [5, 4] })
       draw.line2(ctx, vp, corner, sv, { color: COLORS.green, width: 1.5, dash: [5, 4] })
+      // Each leg label sits on the leg's outer side — which flips with the sign of
+      // sv, since a negative s puts the triangle in the opposite quadrant.
       const mRun = vp.toScreen(v2.lerp(O, corner, 0.5))
       const mRise = vp.toScreen(v2.lerp(corner, sv, 0.5))
-      draw.drawLabel(ctx, `x: ${fmt(sv.x)}`, v2.vec2(mRun.x - 16, mRun.y + 15), COLORS.red)
-      draw.drawLabel(ctx, `y: ${fmt(sv.y)}`, v2.vec2(mRise.x + 9, mRise.y), COLORS.green)
+      const runText = `x: ${fmt(sv.x)}`
+      const riseText = `y: ${fmt(sv.y)}`
+      ctx.font = draw.MONO_FONT
+      const runAt = v2.vec2(
+        mRun.x - ctx.measureText(runText).width / 2,
+        mRun.y + (sv.y >= 0 ? 15 : -15),
+      )
+      const riseAt = v2.vec2(
+        sv.x >= 0 ? mRise.x + 9 : mRise.x - 9 - ctx.measureText(riseText).width,
+        mRise.y,
+      )
+      draw.drawLabel(ctx, runText, runAt, COLORS.red)
+      draw.drawLabel(ctx, riseText, riseAt, COLORS.green)
 
       // base vector (draggable) under the scaled one
       draw.arrow2(ctx, vp, O, base, { color: COLORS.ghost, width: 2, label: 'v' })
       draw.point2(ctx, vp, base, { color: COLORS.fg, r: 4 })
-      draw.arrow2(ctx, vp, O, sv, { color: COLORS.accent, width: 2.5, label: 'scale(v, s)' })
+      draw.arrow2(ctx, vp, O, sv, { color: COLORS.accent, width: 2.5 })
 
-      // hypotenuse length, posted along the arrow
-      const mid = vp.toScreen(v2.scale(sv, 0.5))
-      draw.drawLabel(ctx, `√(x²+y²) = ${len.toFixed(2)}`, v2.vec2(mid.x + 10, mid.y - 16), COLORS.yellow)
+      // Both of these labels annotate the same arrow, so they get their own
+      // territory: the name sits past the arrowhead, the length rides the shaft
+      // (rotated, on the triangle's inside, where it crosses nothing).
+      const tail = vp.toScreen(O)
+      const head = vp.toScreen(sv)
+      const dir = v2.normalize(v2.sub(head, tail))
+      const halfName = ctx.measureText('scale(v, s)').width / 2
+      // Push off the tip far enough that the label's own box clears it, whichever
+      // way the arrow points — its half-width matters when the arrow runs sideways,
+      // its half-height when the arrow runs up or down.
+      const clear = 12 + halfName * Math.abs(dir.x) + 7 * Math.abs(dir.y)
+      const at = v2.add(head, v2.scale(dir, clear))
+      draw.drawLabel(ctx, 'scale(v, s)', v2.vec2(at.x - halfName, at.y), COLORS.accent)
+
+      // Drop the number (the HUD still has it) when the shaft is too short to
+      // carry the full string, and the whole label once even the formula won't fit.
+      const shaft = v2.length(v2.sub(head, tail))
+      const withNum = `√(x²+y²) = ${len.toFixed(2)}`
+      const lenText = ctx.measureText(withNum).width + 16 < shaft ? withNum : '√(x²+y²)'
+      if (ctx.measureText(lenText).width < shaft) {
+        draw.drawLabelAlong(ctx, lenText, tail, head, {
+          offset: 13,
+          toward: vp.toScreen(corner),
+          color: COLORS.yellow,
+        })
+      }
 
       const tag = (ok: boolean) => (fns && ok ? '' : ' (reference)')
       setHud(
