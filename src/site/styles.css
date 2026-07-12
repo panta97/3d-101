@@ -17,6 +17,11 @@
   --purple: #c678dd;
   --cyan: #56b6c2;
   --mono: 'SF Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+
+  /* Reading column width — 76ch at the 17px body font. Kept in px, not ch, so
+     the section rail can offset from it: ch inside the rail would resolve
+     against the rail's own smaller font and land the column in the wrong place. */
+  --prose-max: 814px;
 }
 
 * {
@@ -25,6 +30,12 @@
 
 html {
   scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
 
 body {
@@ -67,7 +78,7 @@ body {
 }
 
 .module-nav {
-  max-width: 76ch;
+  max-width: var(--prose-max);
   margin: 4rem auto 0;
   padding: 1.5rem 1.4rem 3rem;
   display: flex;
@@ -89,10 +100,212 @@ body {
   color: var(--fg-dim);
 }
 
+/* ---- section menu ----
+
+   The rail is fixed and parked just left of the centered prose column, so the
+   reading column stays exactly where it is with no sidebar wrapper. Below
+   --page-nav-wide there is no room beside a 76ch column, and the same <nav>
+   re-skins as a dropdown under the header, opened by .page-nav-toggle. */
+
+.page-nav {
+  position: fixed;
+  top: 4rem;
+  /* Parked in the gutter: half the column, then the rail's own 14rem + 2rem gap. */
+  left: max(1rem, calc(50% - var(--prose-max) / 2 - 16rem));
+  width: 14rem;
+  max-height: calc(100vh - 5.5rem);
+  overflow-y: auto;
+  font-size: 0.85rem;
+}
+
+.page-nav-label {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  margin: 1.4rem 0 0.6rem;
+}
+
+.page-nav-sections {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 1px solid var(--border);
+}
+
+.page-nav-sections a {
+  display: flex;
+  gap: 0.55rem;
+  padding: 0.35rem 0.7rem;
+  margin-left: -1px;
+  border-left: 1px solid transparent;
+  color: var(--fg-dim);
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.page-nav-sections a:hover {
+  color: var(--fg);
+}
+
+.page-nav-sections a.is-active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+
+.page-nav-sections .n {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  flex: none;
+}
+
+/* ---- module switcher ---- */
+
+.page-nav-modules summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--fg-dim);
+}
+
+.page-nav-modules summary::-webkit-details-marker {
+  display: none;
+}
+
+.page-nav-modules summary::after {
+  content: '▾';
+  color: var(--fg-dim);
+}
+
+.page-nav-modules summary:hover {
+  border-color: var(--fg-dim);
+  color: var(--fg);
+}
+
+.page-nav-modules ul {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+}
+
+.page-nav-modules li a,
+.page-nav-modules li span {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 4px;
+  color: var(--fg);
+  text-decoration: none;
+  line-height: 1.35;
+}
+
+.page-nav-modules li a:hover {
+  background: var(--bg-inset);
+}
+
+.page-nav-modules li a[aria-current] .t {
+  color: var(--accent);
+}
+
+.page-nav-modules li.is-stub span {
+  color: var(--fg-dim);
+}
+
+.page-nav-modules .n {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-weight: 700;
+  flex: none;
+  width: 2ch;
+  text-align: right;
+}
+
+.page-nav-modules li.is-stub .n {
+  color: var(--fg-dim);
+  font-weight: 400;
+}
+
+/* ---- heading anchors ---- */
+
+.prose h2 {
+  scroll-margin-top: 4.2rem;
+}
+
+.heading-anchor {
+  font-family: var(--mono);
+  color: var(--fg-dim);
+  text-decoration: none;
+  margin-left: 0.5rem;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.prose h2:hover .heading-anchor,
+.heading-anchor:focus-visible {
+  opacity: 1;
+}
+
+/* ---- collapsed layout ---- */
+
+.page-nav-toggle {
+  display: none;
+  margin-left: auto;
+  flex: none;
+}
+
+/* Below this there is no gutter left beside the reading column for a rail. */
+@media (max-width: 1360px) {
+  .page-nav-toggle {
+    display: block;
+  }
+
+  .page-nav {
+    display: none;
+    top: 3.4rem;
+    left: auto;
+    right: 1rem;
+    width: min(22rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 5rem);
+    z-index: 9;
+    padding: 0.8rem 1rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-raised);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  }
+
+  .page-nav.is-open {
+    display: block;
+  }
+
+  .page-nav-label {
+    margin-top: 1rem;
+  }
+
+  .page-nav-modules summary,
+  .page-nav-modules ul {
+    background: var(--bg-inset);
+  }
+}
+
 /* ---- prose column ---- */
 
 .prose {
-  max-width: 76ch;
+  max-width: var(--prose-max);
   margin: 0 auto;
   padding: 2.5rem 1.4rem 1rem;
 }

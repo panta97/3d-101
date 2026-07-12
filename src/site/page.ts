@@ -1,4 +1,5 @@
 import './styles.css'
+import { buildSectionNav } from './nav'
 
 export interface TocEntry {
   num: number
@@ -105,6 +106,7 @@ function buildHeader(opts: PageOptions): HTMLElement {
   header.innerHTML = `
     <a class="site-title" href="${rootPrefix(opts)}">3d-101</a>
     ${current ? `<span class="site-breadcrumb">Module ${current.num} — ${current.title}</span>` : ''}
+    ${current ? `<button class="page-nav-toggle" aria-expanded="false">Sections</button>` : ''}
   `
   return header
 }
@@ -156,6 +158,9 @@ export function initPage(opts: PageOptions = {}): void {
   document.body.prepend(buildHeader(opts))
   const footerNav = buildFooterNav(opts)
   if (footerNav) document.body.append(footerNav)
+
+  // Before KaTeX, so section titles are read as authored.
+  if (opts.module) buildSectionNav(opts.module)
 
   // The Lezer parser is only loaded on pages that actually contain a code block.
   if (document.querySelector('.prose pre > code')) {
