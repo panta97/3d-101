@@ -87,11 +87,15 @@ export const TOC: TocEntry[] = [
 interface PageOptions {
   /** Module number (1-based) when initializing a module page; omit on the home page. */
   module?: number
+  /** Path back to the site root. Defaults from `module`; set it on other subpages (/sandbox/). */
+  root?: string
+  /** Header breadcrumb for pages that aren't modules. */
+  breadcrumb?: string
 }
 
 /** Path prefix back to the site root from the current page. */
 function rootPrefix(opts: PageOptions): string {
-  return opts.module ? '../../' : './'
+  return opts.root ?? (opts.module ? '../../' : './')
 }
 
 function hrefFor(entry: TocEntry, opts: PageOptions): string | null {
@@ -103,9 +107,10 @@ function buildHeader(opts: PageOptions): HTMLElement {
   const header = document.createElement('header')
   header.className = 'site-header'
   const current = opts.module ? TOC[opts.module - 1] : null
+  const crumb = current ? `Module ${current.num} — ${current.title}` : opts.breadcrumb
   header.innerHTML = `
     <a class="site-title" href="${rootPrefix(opts)}">3d-101</a>
-    ${current ? `<span class="site-breadcrumb">Module ${current.num} — ${current.title}</span>` : ''}
+    ${crumb ? `<span class="site-breadcrumb">${crumb}</span>` : ''}
     ${current ? `<button class="page-nav-toggle" aria-expanded="false">Sections</button>` : ''}
   `
   return header

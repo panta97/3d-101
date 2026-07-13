@@ -292,13 +292,26 @@ const v = { x: 3, y: 2 }</code></pre>
 
       <p class="insight">
         Velocity first, then position with the <em>new</em> velocity — that ordering is
-        semi-implicit Euler, and it is the difference between simulations that settle and
+        <span
+          class="term"
+          tabindex="0"
+          data-tooltip="Semi-implicit (or symplectic) Euler: a way of stepping a simulation forward in time. You update velocity from the current acceleration first, then move the position with that just-updated velocity. Plain (explicit) Euler moves the position with the old velocity instead, which quietly injects energy every step until the simulation blows up."
+          >semi-implicit Euler</span
+        >, and it is the difference between simulations that settle and
         simulations that explode.
       </p>
 
       <div data-widget="particle-fountain" data-driven-by="01/capstone-fountain"></div>
 
       <div data-exercise="01/capstone-fountain"></div>
+
+      <p class="insight">
+        Stuck, or want to see <em>inside</em> a frame? Open this capstone in the
+        <a href="../../sandbox/?scene=m01-fountain">sandbox</a>: it runs the same code, but pauses
+        on any frame, steps one tick at a time, and shows you the exact <code>pos</code>,
+        <code>vel</code> and <code>age</code> a particle was handed — with the semi-implicit Euler
+        arithmetic for that frame printed next to what your <code>updateParticle</code> returned.
+      </p>
 
       <p>
         You just shipped a physics integrator. It's small, but it's real: the loop you wrote —

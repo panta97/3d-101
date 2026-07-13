@@ -23,6 +23,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(root, 'index.html'),
+        sandbox: resolve(root, 'sandbox/index.html'),
         ...moduleEntries,
       },
     },

@@ -76,6 +76,16 @@ export class CanvasWidget {
     this.bindPointer()
   }
 
+  /**
+   * Change the canvas height (CSS px) and re-size the backing store. Module
+   * widgets are fixed-height; the sandbox fills a resizable pane.
+   */
+  setHeight(h: number): void {
+    if (h === this.height || h <= 0) return
+    this.height = h
+    this.resize()
+  }
+
   /** Queue a redraw (no-op in animated mode, which redraws every frame anyway). */
   requestDraw(): void {
     if (this.opts.mode === 'animated' || this.drawQueued) return

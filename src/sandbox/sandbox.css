@@ -1,0 +1,656 @@
+/* ---------------------------------------------------------------------------
+   Sandbox. The rest of the site is a reading column; this is an app — it fills
+   the viewport and never scrolls as a whole (each pane scrolls itself).
+--------------------------------------------------------------------------- */
+
+body.sb-body {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* The mount point is a flex item too — without this, `.sb`'s `flex: 1` has no
+   flex parent to fill and the whole app collapses to its content height. */
+body.sb-body > #sandbox {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/*
+  Flex with PIXEL panel sizes, not a grid with percentage rows.
+
+  The panels below are `flex: 0 0 <px>` — they never grow. A grid row sized
+  `auto` (or a % flex-basis against an auto-sized row) takes its height from
+  its content, so a long particle list inflated the inspector and pushed the
+  viewport up off the screen instead of scrolling inside its pane. Fixed
+  basis + `min-height: 0` everywhere means overflow scrolls, never shoves.
+*/
+.sb {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: var(--border);
+
+  /* Panel sizes; the gutters rewrite these on drag (see splitter.ts). */
+  --sb-left-w: 58%;
+  --sb-inspector-h: 300px;
+  --sb-bottom-h: 300px;
+}
+
+.sb-left {
+  flex: 0 0 var(--sb-left-w);
+  min-width: 340px;
+}
+
+.sb-right {
+  flex: 1 1 0;
+  min-width: 320px;
+}
+
+.sb-left,
+.sb-right {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* ---- gutters ---- */
+
+.sb-gutter {
+  flex: none;
+  background: var(--border);
+  transition: background 120ms;
+}
+
+.sb-gutter:hover,
+.sb-gutter:focus-visible,
+.sb-gutter.is-dragging {
+  background: var(--accent);
+  outline: none;
+}
+
+.sb-gutter-v {
+  width: 5px;
+  cursor: col-resize;
+}
+
+.sb-gutter-h {
+  height: 5px;
+  cursor: row-resize;
+}
+
+/* Keep the cursor steady while dragging, even outside the gutter itself. */
+body.sb-resizing-x,
+body.sb-resizing-x * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+body.sb-resizing-y,
+body.sb-resizing-y * {
+  cursor: row-resize !important;
+  user-select: none;
+}
+
+/* ---- viewport ---- */
+
+.sb-view {
+  flex: 1;
+  min-height: 200px;
+  position: relative;
+  background: var(--bg-inset);
+}
+
+/*
+  Out of flow, deliberately. The canvas height is set from .sb-view's measured
+  height; if the canvas stayed in flow it would also *contribute* to that
+  height, and the ResizeObserver would chase its own tail — growing the canvas
+  a few px per frame and re-clearing it (assigning canvas.width wipes it) so
+  nothing ever appeared. Absolute positioning breaks the cycle.
+*/
+.sb-view .widget-canvas-wrap {
+  position: absolute;
+  inset: 0;
+}
+
+.sb-view canvas {
+  display: block;
+  width: 100%;
+  cursor: grab;
+}
+
+.sb-view canvas.is-dragging {
+  cursor: grabbing;
+}
+
+.sb-view canvas.is-draggable {
+  cursor: pointer;
+}
+
+/* ---- transport ---- */
+
+.sb-transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.sb-btn {
+  flex: none;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: 500 13px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  cursor: pointer;
+}
+
+.sb-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sb-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #14181f;
+}
+
+.sb-btn.primary:hover {
+  filter: brightness(1.12);
+  color: #14181f;
+}
+
+.sb-play {
+  min-width: 42px;
+}
+
+.sb-speed {
+  min-width: 48px;
+  font-family: var(--mono);
+}
+
+.sb-scrub {
+  flex: 1;
+  min-width: 80px;
+  accent-color: var(--accent);
+}
+
+.sb-frame {
+  flex: none;
+  color: var(--fg-dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+/* ---- params ---- */
+
+.sb-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+.sb-param {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sb-param input[type='range'] {
+  width: 96px;
+  accent-color: var(--accent);
+}
+
+.sb-param .value {
+  min-width: 46px;
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* ---- inspector ---- */
+
+.sb-inspector {
+  flex: 0 0 var(--sb-inspector-h);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-inset);
+}
+
+.sb-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sb-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.sb-stat .k {
+  color: var(--fg-dim);
+}
+
+.sb-stat .v {
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.sb-cols {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px;
+  background: var(--border);
+}
+
+.sb-col {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-inset);
+}
+
+.sb-col h3 {
+  margin: 0;
+  padding: 7px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  border-bottom: 1px solid var(--border);
+}
+
+.sb-hint {
+  margin-left: 6px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.7;
+}
+
+.sb-entities,
+.sb-trace {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.sb-empty {
+  margin: 8px;
+  color: var(--fg-dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.sb-empty.is-bad {
+  color: var(--red);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.sb-empty code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg);
+}
+
+/* entity rows */
+
+.sb-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sb-row:hover {
+  background: var(--bg-raised);
+}
+
+.sb-row.is-selected {
+  border-color: var(--yellow);
+  background: rgba(229, 192, 123, 0.1);
+}
+
+.sb-row .id {
+  flex: none;
+  width: 40px;
+  color: var(--yellow);
+}
+
+.sb-row .f {
+  color: var(--fg);
+}
+
+.sb-row .f i {
+  font-style: normal;
+  color: var(--fg-dim);
+}
+
+/* math trace */
+
+.sb-trace-line {
+  padding: 7px 9px;
+  margin-bottom: 5px;
+  border-left: 2px solid var(--border);
+  border-radius: 0 5px 5px 0;
+  background: var(--bg);
+}
+
+.sb-trace-line.is-ok {
+  border-left-color: var(--green);
+}
+
+.sb-trace-line.is-bad {
+  border-left-color: var(--red);
+  background: rgba(224, 108, 117, 0.08);
+}
+
+.sb-trace-line .head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sb-trace-line .lbl {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.sb-trace-line .mark.ok {
+  color: var(--green);
+}
+
+.sb-trace-line .mark.bad {
+  color: var(--red);
+}
+
+.sb-trace-line .expr {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--fg-dim);
+  word-break: break-word;
+}
+
+.sb-trace-line .val {
+  font-size: 12px;
+  color: var(--fg);
+}
+
+.sb-trace-line .got {
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--red);
+}
+
+.sb-trace-line .note {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--yellow);
+}
+
+/* ---- right column: editor, console, tests ---- */
+
+.sb-bar,
+.sb-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.sb-tabs {
+  flex: none;
+}
+
+.sb-tab {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--fg-dim);
+  font: 500 13px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  cursor: pointer;
+}
+
+.sb-tab:hover {
+  color: var(--fg);
+}
+
+.sb-tab.is-active {
+  background: var(--bg-inset);
+  color: var(--fg);
+}
+
+.sb-only {
+  margin-left: auto;
+  color: var(--fg-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sb-editor {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Tabs + console/tests, sized as one unit by the gutter above it. */
+.sb-bottom {
+  flex: 0 0 var(--sb-bottom-h);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sb-editor .cm-editor {
+  height: 100%;
+}
+
+.sb-editor .cm-scroller {
+  overflow: auto;
+}
+
+.sb-status {
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--fg-dim);
+  max-height: 4.4em;
+  overflow-y: auto;
+}
+
+.sb-status.is-ok {
+  color: var(--green);
+}
+
+.sb-status.is-err {
+  color: var(--red);
+}
+
+.sb-status.is-warn {
+  color: var(--yellow);
+}
+
+.sb-pane {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg-inset);
+}
+
+.sb-pane.is-hidden {
+  display: none;
+}
+
+.sb-console-list {
+  padding: 4px 0;
+}
+
+.sb-log {
+  display: flex;
+  gap: 8px;
+  padding: 2px 10px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+
+.sb-log:hover {
+  background: var(--bg-raised);
+}
+
+.sb-log .fr {
+  flex: none;
+  width: 34px;
+  text-align: right;
+  color: var(--fg-dim);
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.sb-log .msg {
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sb-log.is-warn {
+  border-left-color: var(--yellow);
+}
+
+.sb-log.is-warn .msg {
+  color: var(--yellow);
+}
+
+.sb-log.is-error {
+  border-left-color: var(--red);
+}
+
+.sb-log.is-error .msg {
+  color: var(--red);
+}
+
+/* tests */
+
+.sb-test {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 2px 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.sb-test .mark {
+  grid-row: 1 / span 3;
+}
+
+.sb-test.is-ok .mark {
+  color: var(--green);
+}
+
+.sb-test.is-bad .mark {
+  color: var(--red);
+}
+
+.sb-test .m {
+  font-size: 11.5px;
+  color: var(--red);
+}
+
+.sb-test .h {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--yellow);
+}
+
+/* ---- narrow screens: stack, and let the page scroll ---- */
+
+@media (max-width: 960px) {
+  body.sb-body {
+    height: auto;
+    overflow: auto;
+  }
+
+  /* Stacked: the panes are full-width, so dragging a divider means nothing. */
+  .sb {
+    flex-direction: column;
+  }
+
+  .sb-gutter {
+    display: none;
+  }
+
+  .sb-left,
+  .sb-right {
+    flex: none;
+    width: 100%;
+  }
+
+  .sb-view {
+    flex: none;
+    height: 340px;
+  }
+
+  .sb-inspector {
+    flex: none;
+    height: 420px;
+  }
+
+  .sb-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .sb-editor {
+    flex: none;
+    height: 320px;
+  }
+
+  .sb-bottom {
+    flex: none;
+    height: 260px;
+  }
+}

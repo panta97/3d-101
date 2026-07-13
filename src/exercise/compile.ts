@@ -14,15 +14,27 @@
  * ban) — fine for static self-study hosting.
  */
 
-import type { ExerciseSpec, UserFns, TestResult } from './types'
+import type { ExerciseSpec, UserFns, TestResult, Lib } from './types'
 import { approxDeepEqual, formatValue } from './assert'
 import { pickLib, LIB } from './lib'
 
 export class CompileError extends Error {}
 
-export function compileUserCode(spec: ExerciseSpec, code: string): UserFns {
+/**
+ * Compile learner code.
+ *
+ * `scope` injects extra names alongside the spec's `provides` — they become
+ * ordinary `const`s in the learner's scope, so an entry named `Math` or
+ * `console` *shadows* the global one for the duration of their code. The
+ * sandbox uses exactly that to hand out a seeded `Math.random` (deterministic
+ * replay) and a `console` that records into the current frame. A scope name
+ * wins over a `provides` name of the same spelling.
+ */
+export function compileUserCode(spec: ExerciseSpec, code: string, scope?: Lib): UserFns {
   const provides = spec.provides ?? []
-  const destructure = provides.length ? `const { ${provides.join(', ')} } = lib;` : ''
+  // Deduped: `const { add3, add3 } = lib` is a SyntaxError.
+  const names = [...new Set([...provides, ...Object.keys(scope ?? {})])]
+  const destructure = names.length ? `const { ${names.join(', ')} } = lib;` : ''
   // `typeof name` is safe even when `name` was never declared.
   const returns = spec.exports
     .map((n) => `${n}: typeof ${n} === 'function' ? ${n} : undefined`)
@@ -40,7 +52,7 @@ export function compileUserCode(spec: ExerciseSpec, code: string): UserFns {
 
   let result: Record<string, unknown>
   try {
-    result = factory(pickLib(provides))
+    result = factory({ ...pickLib(provides), ...scope })
   } catch (err) {
     throw new CompileError(
       `Your code threw while loading: ${err instanceof Error ? err.message : String(err)}`,
