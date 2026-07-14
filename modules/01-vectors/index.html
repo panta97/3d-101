@@ -320,6 +320,100 @@ const v = { x: 3, y: 2 }</code></pre>
         page came out of your editor, and from here on the course builds with <em>your</em>
         library.
       </p>
+      <!-- ============================ 1.8 ============================ -->
+      <h2><span class="secnum">1.8</span> Why you can add a velocity to a position</h2>
+
+      <p>
+        One line of the code you just wrote deserves a second look:
+        <code>add3(p.pos, scale3(newVel, dt))</code>. If it bothered you — a position is a place
+        in the world, a velocity is a <em>speed</em>, and you just added them — good. It should.
+        A position and a velocity are not the same kind of thing, and you cannot add them. The
+        resolution is that the code never does: <code>dt</code> always gets there first.
+      </p>
+
+      <p>
+        Start with the units. Position lives in meters. Velocity lives in meters <em>per second</em>.
+        Adding them raw would be adding 5&nbsp;kg to 3&nbsp;°C — dimensionally meaningless. But
+        multiply velocity by an interval of time and the seconds cancel:
+        $$\vec{v} \cdot \Delta t \;=\; \frac{\text{m}}{\text{s}} \cdot \text{s} \;=\; \text{m}$$
+        What comes out the other side is no longer a velocity. It is a <b>displacement</b> — “how
+        far did the particle actually travel during this slice of time” — and a displacement lives
+        in position-space, so adding it to a position is legal. Drive at 60&nbsp;km/h for half an
+        hour and you add 30&nbsp;km to your odometer. You never add “60&nbsp;km/h” to an odometer.
+      </p>
+
+      <p class="insight">
+        <code>dt</code> is a bridge that converts a <em>rate</em> into an <em>amount</em>, and only
+        amounts are ever added to positions. Read <code>scale3(anythingPerSecond, dt)</code> as
+        “what actually happened during this frame” and the whole update function reads naturally.
+      </p>
+
+      <p>
+        The same idea, in the language of calculus: this is the definition of velocity, run
+        backwards. Velocity is the derivative of position, so
+        $$\vec{v} = \frac{d\vec{x}}{dt} \quad\Longrightarrow\quad d\vec{x} = \vec{v}\,dt
+        \quad\Longrightarrow\quad \vec{x}(t + \Delta t) \approx \vec{x}(t) + \vec{v}\,\Delta t$$
+        That last expression is the first-order Taylor expansion of the trajectory. The true path
+        curves, but over one tiny slice of time it is <em>approximately straight</em>, and
+        $\vec{v}\,\Delta t$ is exactly that straight segment. Euler integration is nothing grander
+        than replacing a smooth curve with a chain of short straight segments — and the smaller
+        <code>dt</code> is, the better the chain fits the curve. The same logic applies one level
+        up: gravity is an acceleration (m/s²), so <code>gravity·dt</code> is a <em>change in
+        velocity</em> — the same kind of thing as a velocity, and therefore addable to one.
+      </p>
+
+      <div data-widget="euler-step"></div>
+
+      <p>
+        Drag <code>dt</code> to the right and watch the straight segments peel away from the true
+        curve; drag it left and they disappear into it. That gap is the integration error, and it is
+        the entire reason <code>dt</code> is a number you get to choose. Flipping on <b>explicit
+        Euler</b> — moving with the <em>old</em> velocity, <code>pos′ = pos + vel·dt</code> — shows
+        the ordering from §1.7 as a fork in the road: the arc now lands long instead of short. On a
+        thrown rock the two are simply wrong in opposite directions. The reason the capstone insists
+        on the semi-implicit order is that once a force <em>pushes back</em> — a spring, an orbit, a
+        cloth seam — explicit Euler's error compounds in the same direction every step and the
+        simulation gains energy until it tears itself apart, while semi-implicit just wobbles around
+        the truth forever.
+      </p>
+
+      <p>
+        There is one more way to see why the arithmetic works, and it is the deepest. Positions and
+        displacements are different mathematical objects: a position is a <b>point</b> in an
+        <span
+          class="term"
+          tabindex="0"
+          data-tooltip="Affine space: a space of points with no privileged origin, paired with a vector space of displacements between them. You may subtract two points to get the vector between them, and you may add a vector to a point to reach another point — but points themselves have no addition. Euclidean space is affine; treating it as a vector space is a convenience the origin lets you get away with."
+          >affine space</span
+        >, while a velocity or a displacement is a <b>vector</b>. The legal operations are exactly:
+      </p>
+      <ul>
+        <li><b>point + vector → point</b> ✓ — <code>pos + vel·dt</code>, the line you just wrote.</li>
+        <li><b>vector + vector → vector</b> ✓ — <code>vel + gravity·dt</code>, the line above it.</li>
+        <li>
+          <b>point + point → ✗</b>, meaningless — what would “Lima + Arequipa” even be? (Though
+          <em>subtracting</em> them is fine, and gives the arrow between: that is §1.2.)
+        </li>
+      </ul>
+
+      <p>
+        Which is the precise version of the very first thing this module told you. §1.1 said a
+        vector is two numbers with two meanings — a place or a move — and that which one you mean
+        “lives in your head, not the type system.” Here is the proof: <code>Vec3</code> conflates
+        points and vectors, nothing stops you from adding two positions, and yet your physics code
+        respected the affine rules on every line, because the physics gave you no other choice.
+      </p>
+
+      <p class="hook">
+        Some geometry libraries refuse to conflate them: they ship separate <code>Point3</code> and
+        <code>Vec3</code> types so the compiler rejects <code>point + point</code> outright, turning
+        a whole class of bug into a build error. And because the size of <code>dt</code> is what
+        governs the integration error you just watched, shipping engines refuse to hand physics the
+        raw frame time at all — they accumulate it and step the simulation at a fixed
+        <code>dt</code>, so the world behaves identically whether the machine is rendering at
+        30&nbsp;fps or 240.
+      </p>
+
       <p>
         Two loose threads to carry forward. You can add vectors and scale them by numbers — but
         what could <code>a * b</code> possibly mean for <em>two vectors</em>? Module 2 gives the

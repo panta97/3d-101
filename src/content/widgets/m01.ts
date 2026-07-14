@@ -1237,6 +1237,248 @@ const particleFountain: WidgetFactory = (container) => {
   }
 }
 
+/* ------------------------------------------------------------------ */
+
+/**
+ * Euler step (§1.8) — static, not exercise-driven. One launched particle,
+ * drawn twice: the analytic parabola it *should* follow, and the polygon Euler
+ * actually walks. The annotated step shows what really gets added to a
+ * position — never `vel` (a rate), only `vel·dt` and the `g·dt·dt` correction.
+ */
+const eulerStep: WidgetFactory = (container) => {
+  const P0 = v2.vec2(0, 0)
+  const V0 = v2.vec2(5, 7)
+  const G = v2.vec2(0, -10)
+  const LANDS_AT = 1.4 // true flight time: 2 * V0.y / |G|
+  const TRUE_RANGE = V0.x * LANDS_AT
+  // Wide enough for explicit Euler's overshoot at dt = 0.6, tall enough that the
+  // full one-second `vel` arrow — the whole point of the figure — stays on canvas.
+  const WORLD_W = 13.5
+  const WORLD_H = 8.6
+
+  let dt = 0.3
+  let stepK = 1
+  let explicit = false
+
+  const truePos = (t: number) =>
+    v2.add(P0, v2.add(v2.scale(V0, t), v2.scale(G, 0.5 * t * t)))
+
+  /** The polygon Euler walks, and the velocity it holds at each vertex. */
+  const integrate = () => {
+    const pts: Vec2[] = [P0]
+    const vels: Vec2[] = [V0]
+    let p = P0
+    let v = V0
+    for (let i = 0; i < 200 && p.y >= 0; i++) {
+      if (explicit) {
+        p = v2.add(p, v2.scale(v, dt)) // moves with the OLD velocity
+        v = v2.add(v, v2.scale(G, dt))
+      } else {
+        v = v2.add(v, v2.scale(G, dt)) // velocity first…
+        p = v2.add(p, v2.scale(v, dt)) // …then move with the NEW one
+      }
+      pts.push(p)
+      vels.push(v)
+    }
+    return { pts, vels }
+  }
+
+  /** Where the polygon crosses y = 0, by lerping its last segment. */
+  const landing = (pts: Vec2[]) => {
+    const b = pts[pts.length - 1]
+    const a = pts[pts.length - 2]
+    if (!a || b.y > 0 || a.y === b.y) return b.x
+    return v2.lerp(a, b, a.y / (a.y - b.y)).x
+  }
+
+  const widget = new CanvasWidget(container, {
+    mode: 'static',
+    height: 380,
+    draw(ctx, w) {
+      // Viewport2D scales off the height, so a narrow canvas has to zoom out
+      // or the arc runs off the right edge.
+      vp.unitsHigh = Math.max(WORLD_H, (WORLD_W * w.height) / w.width)
+      const unitsWide = (vp.unitsHigh * w.width) / w.height
+      vp.center = v2.vec2(-1.5 + unitsWide / 2, -1.2 + vp.unitsHigh / 2)
+
+      draw.grid2(ctx, vp, w)
+
+      // the true path — what the polygon is approximating
+      ctx.save()
+      ctx.strokeStyle = COLORS.ghost
+      ctx.lineWidth = 2
+      ctx.setLineDash([6, 5])
+      ctx.beginPath()
+      for (let i = 0; i <= 96; i++) {
+        const s = vp.toScreen(truePos((i / 96) * LANDS_AT))
+        if (i === 0) ctx.moveTo(s.x, s.y)
+        else ctx.lineTo(s.x, s.y)
+      }
+      ctx.stroke()
+      ctx.restore()
+      draw.drawLabel(ctx, 'true curve', vp.toScreen(v2.vec2(5.9, 0.8)), COLORS.dim)
+
+      const { pts, vels } = integrate()
+
+      // the polygon Euler actually walks
+      for (let i = 0; i < pts.length - 1; i++) {
+        draw.line2(ctx, vp, pts[i], pts[i + 1], { color: COLORS.accent, width: 2.5 })
+      }
+      for (const p of pts) draw.point2(ctx, vp, p, { color: COLORS.accent, r: 3.5 })
+
+      // anatomy of one step
+      const k = Math.min(stepK, pts.length - 2)
+      const pos = pts[k]
+      const posNext = pts[k + 1]
+      const vel = vels[k]
+      const gdtdt = v2.scale(G, dt * dt)
+      const sPos = vp.toScreen(pos)
+      const sNext = vp.toScreen(posNext)
+      const px = v2.length(v2.sub(sNext, sPos))
+
+      // Once the step is short on screen the annotation collapses into an
+      // unreadable knot — and at small dt the lesson is the polygon hugging the
+      // curve, which the annotation would only obscure. Drop it entirely.
+      if (px >= 55) {
+        // `vel` itself: a rate. Deliberately huge — a whole second of motion,
+        // and the one arrow you may never add to a position.
+        draw.arrow2(ctx, vp, pos, v2.add(pos, vel), {
+          color: COLORS.dim,
+          width: 1.5,
+          dash: [4, 5],
+        })
+        // vel·dt is collinear with vel — it IS this arrow, scaled by dt — so both
+        // labels want the same line. Ride the shaft (the tip drifts into the HUD),
+        // and keep this one above it while vel·dt takes the side below.
+        const sRateTip = vp.toScreen(v2.add(pos, vel))
+        const above = v2.vec2(sPos.x, sPos.y - 400)
+        const below = v2.vec2(sPos.x, sPos.y + 400)
+        draw.drawLabelAlong(ctx, 'vel — a rate: one whole second', sPos, sRateTip, {
+          offset: 15,
+          toward: above,
+          color: COLORS.dim,
+        })
+
+        // Semi-implicit walks pos → corner → pos′ tip-to-tail. Explicit stops
+        // at the corner: vel·dt IS the whole move, and the correction it skipped
+        // hangs off the end, waiting for the next step. Same picture, one relabel.
+        const corner = v2.add(pos, v2.scale(vel, dt))
+        const sCorner = vp.toScreen(corner)
+
+        if (explicit) {
+          draw.arrow2(ctx, vp, corner, v2.add(corner, gdtdt), {
+            color: COLORS.ghost,
+            width: 2,
+            dash: [4, 4],
+          })
+          draw.drawLabel(
+            ctx,
+            'gravity·dt·dt — waits for the NEXT step',
+            v2.vec2(sCorner.x + 12, vp.toScreen(v2.add(corner, gdtdt)).y + 12),
+            COLORS.dim,
+          )
+        } else {
+          draw.arrow2(ctx, vp, pos, corner, { color: COLORS.green, width: 2.5 })
+          draw.drawLabelAlong(ctx, 'vel·dt', sPos, sCorner, {
+            offset: 14,
+            toward: below, // opposite side from the `vel` label, which shares this line
+            color: COLORS.green,
+          })
+          draw.arrow2(ctx, vp, corner, posNext, { color: COLORS.purple, width: 2.5 })
+          if (v2.length(gdtdt) * vp.scale >= 14) {
+            draw.drawLabel(
+              ctx,
+              'gravity·dt·dt',
+              v2.vec2(sCorner.x + 10, (sCorner.y + sNext.y) / 2),
+              COLORS.purple,
+            )
+          }
+        }
+
+        // the resultant: the only displacement that ever reaches the position
+        draw.arrow2(ctx, vp, pos, posNext, { color: COLORS.accent, width: 2.5 })
+        // keep the label off the vel·dt / gravity arrows by putting it on the far
+        // side of the segment from the corner (mirror the corner through the mid)
+        const away = v2.sub(v2.scale(v2.lerp(sPos, sNext, 0.5), 2), sCorner)
+        draw.drawLabelAlong(ctx, explicit ? 'vel·dt' : "vel′·dt", sPos, sNext, {
+          offset: 16,
+          toward: away,
+          color: COLORS.accent,
+        })
+
+        draw.point2(ctx, vp, posNext, { color: COLORS.red, r: 6 })
+        draw.drawLabel(ctx, 'pos′', v2.vec2(sNext.x + 10, sNext.y + 14), COLORS.red)
+        draw.point2(ctx, vp, pos, { color: COLORS.yellow, r: 6 })
+        draw.drawLabel(ctx, 'pos', v2.vec2(sPos.x - 34, sPos.y + 12), COLORS.yellow)
+      }
+
+      draw.drawLabel(
+        ctx,
+        explicit
+          ? 'pos′ = pos + vel·dt   (OLD vel)   then   vel′ = vel + g·dt'
+          : "vel′ = vel + g·dt   then   pos′ = pos + vel′·dt",
+        v2.vec2(14, w.height - 16),
+        COLORS.dim,
+      )
+
+      const err = landing(pts) - TRUE_RANGE
+      setHud(
+        `dt = ${dt.toFixed(2)} s → ${pts.length - 1} straight segments\n` +
+          `${explicit ? 'explicit' : 'semi-implicit'}: lands at x = ${landing(pts).toFixed(2)}` +
+          `, true curve lands at x = ${TRUE_RANGE.toFixed(2)}` +
+          `  (error ${err >= 0 ? '+' : ''}${err.toFixed(2)})\n` +
+          `shrink dt and the error shrinks with it`,
+      )
+    },
+  })
+
+  const vp = new Viewport2D(widget, { unitsHigh: WORLD_H })
+  const setHud = hud(container)
+
+  const bar = controlsBar(container)
+  bar.slider({
+    label: 'dt',
+    min: 0.05,
+    max: 0.6,
+    step: 0.01,
+    value: dt,
+    format: (v) => `${v.toFixed(2)} s`,
+    onInput: (v) => {
+      dt = v
+      widget.requestDraw()
+    },
+  })
+  bar.slider({
+    label: 'annotate step',
+    min: 1,
+    max: 10,
+    step: 1,
+    value: stepK,
+    format: (v) => v.toFixed(0),
+    onInput: (v) => {
+      stepK = v
+      widget.requestDraw()
+    },
+  })
+  bar.toggle({
+    label: 'explicit Euler — move with the OLD velocity',
+    onChange: (on) => {
+      explicit = on
+      widget.requestDraw()
+    },
+  })
+
+  widgetNote(
+    container,
+    'The two dots are the only <b>points</b> here; every solid arrow is a <b>displacement</b> — a rate ' +
+      'already multiplied by <code>dt</code>. The dim dashed arrow is <code>vel</code> itself, a ' +
+      '<i>rate</i>: a whole second of motion, and nothing you could ever add to a position. Crank ' +
+      '<b>dt</b> up and the straight segments peel away from the true curve; crank it down and they ' +
+      'hug it. Flip on <b>explicit</b> to move with the old velocity instead, and the arc lands long ' +
+      'rather than short — the ordering is a real choice, not a detail.',
+  )
+}
+
 export const M01_WIDGETS: Record<string, WidgetFactory> = {
   'vector-playground': vectorPlayground,
   'tip-to-tail': tipToTail,
@@ -1248,4 +1490,5 @@ export const M01_WIDGETS: Record<string, WidgetFactory> = {
   'bezier-figure': bezierFigure,
   comet,
   'particle-fountain': particleFountain,
+  'euler-step': eulerStep,
 }
