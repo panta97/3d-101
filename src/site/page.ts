@@ -185,7 +185,7 @@ export function initPage(opts: PageOptions = {}): void {
         ],
         // Never typeset inside code or the editor.
         ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
-        ignoredClasses: ['cm-editor', 'exercise'],
+        ignoredClasses: ['cm-editor', 'monaco-editor', 'exercise'],
         throwOnError: false,
       })
     })

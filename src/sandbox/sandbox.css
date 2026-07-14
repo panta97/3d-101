@@ -488,6 +488,13 @@ body.sb-resizing-y * {
   height: 100%;
 }
 
+/* Monaco measures its own container, so it just needs one that has a height. */
+.sb-editor .monaco-editor,
+.sb-editor .monaco-editor .overflow-guard {
+  width: 100% !important;
+  height: 100% !important;
+}
+
 .sb-editor .cm-scroller {
   overflow: auto;
 }

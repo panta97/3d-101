@@ -29,6 +29,16 @@ const MAX_LOG_ROWS = 400
 /** Sandbox scratch code, kept apart from the module page's exercise attempt. */
 const scratchKey = (sceneId: string) => `3d101:sandbox:${sceneId}`
 
+type EditorKind = 'monaco' | 'codemirror'
+const EDITOR_KEY = '3d101:sandbox:editor'
+
+/** Which editor to mount. `?editor=codemirror` wins, for a one-off comparison. */
+function editorPref(): EditorKind {
+  const q = new URLSearchParams(location.search).get('editor')
+  if (q === 'monaco' || q === 'codemirror') return q
+  return localStorage.getItem(EDITOR_KEY) === 'codemirror' ? 'codemirror' : 'monaco'
+}
+
 const el = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
   cls?: string,
@@ -145,6 +155,7 @@ export class Sandbox {
           <button class="sb-btn sb-load-mine">My exercise code</button>
           <button class="sb-btn sb-load-starter">Starter</button>
           <button class="sb-btn sb-load-solution">Solution</button>
+          <button class="sb-btn sb-editor-swap" title="Switch code editor"></button>
         </div>
         <div class="sb-editor"></div>
         <div class="sb-status"></div>
@@ -215,11 +226,21 @@ export class Sandbox {
     // opens on *your* attempt rather than a blank starter.
     const initial = scratch ?? loadState(spec)?.code ?? spec.starter
 
-    const { createEditor } = await import('@/exercise/editor')
-    this.editor = createEditor(document.querySelector('.sb-editor')!, initial, {
+    const host = document.querySelector<HTMLElement>('.sb-editor')!
+    const hooks = {
       onRun: () => this.run(),
-      onChange: (code) => localStorage.setItem(scratchKey(this.scene.id), code),
-    })
+      onChange: (code: string) => localStorage.setItem(scratchKey(this.scene.id), code),
+    }
+
+    if (editorPref() === 'monaco') {
+      // Typed globals for exactly the functions this exercise puts in scope,
+      // so `add3(` shows its signature instead of reading as an undeclared name.
+      const { createMonacoEditor } = await import('./monaco')
+      this.editor = createMonacoEditor(host, initial, { ...hooks, provides: spec.provides })
+    } else {
+      const { createEditor } = await import('@/exercise/editor')
+      this.editor = createEditor(host, initial, hooks)
+    }
     this.run()
   }
 
@@ -267,6 +288,18 @@ export class Sandbox {
       const saved = loadState(spec)?.code
       if (saved) this.setCode(saved)
       else this.setStatus('no saved attempt for this exercise yet — solve it on the module page', 'warn')
+    })
+
+    // A/B the two editors. Reloading is the honest way to swap: both editors
+    // own their DOM and their workers, and your code is already persisted to
+    // the scratch key on every keystroke, so nothing is lost.
+    const swap = root.querySelector<HTMLButtonElement>('.sb-editor-swap')!
+    const kind = editorPref()
+    swap.textContent = kind === 'monaco' ? 'Editor: Monaco' : 'Editor: CodeMirror'
+    swap.addEventListener('click', () => {
+      localStorage.setItem(EDITOR_KEY, kind === 'monaco' ? 'codemirror' : 'monaco')
+      // Drop any ?editor= override so the stored choice takes effect.
+      location.href = location.pathname + location.search.replace(/[?&]editor=[^&]*/, '')
     })
 
     for (const tab of root.querySelectorAll<HTMLButtonElement>('.sb-tab')) {
@@ -374,9 +407,11 @@ export class Sandbox {
 
   private bindKeys(): void {
     window.addEventListener('keydown', (e) => {
-      // Never steal keys from the editor or a slider.
+      // Never steal keys from the editor or a slider. Miss the editor's own
+      // container class and space would pause the sim mid-word, and the arrow
+      // keys would step frames instead of moving the caret.
       const t = e.target as HTMLElement
-      if (t.closest('.cm-editor') || t.tagName === 'INPUT') return
+      if (t.closest('.cm-editor, .monaco-editor') || t.tagName === 'INPUT') return
       const jump = e.shiftKey ? 10 : 1
       if (e.key === ' ') {
         e.preventDefault()

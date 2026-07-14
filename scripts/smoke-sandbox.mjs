@@ -41,7 +41,8 @@ page.on('pageerror', (e) => errors.push(`PAGEERROR: ${e.message}`))
 const frameNo = () => page.$eval('.sb-frame', (n) => Number(/frame (\d+)/.exec(n.textContent)[1]))
 
 await page.goto(`${base}/sandbox/`, { waitUntil: 'networkidle' })
-await page.waitForSelector('.cm-editor', { timeout: 15000 })
+// Either editor may be mounted (see the Editor: … toggle) — don't assume one.
+await page.waitForSelector('.cm-editor, .monaco-editor', { timeout: 20000 })
 await page.click('.sb-load-solution')
 await page.waitForTimeout(300)
 check('reference solution compiles', (await page.textContent('.sb-status')).includes('compiled'))
@@ -111,6 +112,28 @@ await page.click('.sb-tab[data-tab="tests"]')
 await page.waitForSelector('.sb-test', { timeout: 10000 })
 const failed = await page.$$eval('.sb-test.is-bad .t', (ns) => ns.map((n) => n.textContent))
 check('tests tab fails the right test', failed.some((t) => t.includes('NEW velocity')), failed.join(', '))
+
+// --- Monaco: the IntelliSense that justifies its weight, and the key guard ---
+await page.goto(`${base}/sandbox/?editor=monaco`, { waitUntil: 'networkidle' })
+await page.waitForSelector('.monaco-editor', { timeout: 20000 })
+await page.waitForTimeout(500)
+await page.click('.monaco-editor .view-lines')
+await page.keyboard.press('Meta+End')
+await page.keyboard.type('\nnormalize3(')
+await page.waitForTimeout(1500)
+
+const sig = await page.locator('.parameter-hints-widget').textContent().catch(() => '')
+check('monaco: signature help for injected fns', (sig ?? '').includes('v: Vec3'), (sig ?? '').trim().slice(0, 40))
+
+// Typing must not reach the transport's global keybindings.
+const framePlaying = await page.$eval('.sb-play', (n) => n.classList.contains('is-playing'))
+await page.keyboard.press('Escape')
+await page.keyboard.type(' a b')
+await page.waitForTimeout(200)
+check(
+  'monaco: typing space does not pause the sim',
+  (await page.$eval('.sb-play', (n) => n.classList.contains('is-playing'))) === framePlaying,
+)
 
 check('no console errors', errors.length === 0, errors.join(' | '))
 
