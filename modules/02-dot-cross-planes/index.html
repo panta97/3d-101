@@ -55,10 +55,34 @@
         Positive with, zero perpendicular, negative against: a one-number summary of agreement.
       </p>
       <p>
-        And here's the bridge to what you already own: feed a vector to itself and you get
-        $v \cdot v = v_x^2 + v_y^2$ — that is <code>lengthSq(v)</code>, character for character.
-        You wrote your first dot product in Module 1 without being told; length is just self-dot,
-        square-rooted.
+        And here's the bridge to what you already own: feed a vector to itself. Set $b = a$ in the
+        recipe above and every "matching component" is now the same component twice over, so each
+        product becomes a square:
+      </p>
+      <p>$$ v \cdot v \;=\; v_x v_x + v_y v_y \;=\; v_x^2 + v_y^2 $$</p>
+      <p>
+        That right-hand side is <code>lengthSq(v)</code> from Module 1, character for character.
+        You wrote your first dot product back in §1.3 without being told, and $|v| = \sqrt{v \cdot v}$
+        — length is just self-dot, square-rooted. In 3D nothing changes but the extra term:
+        $v \cdot v = v_x^2 + v_y^2 + v_z^2$.
+      </p>
+      <p>
+        The geometric formula has to agree, and watching it do so is the point. A vector laid tail
+        to tail with <em>itself</em> makes an angle of zero, and $\cos 0 = 1$, so
+        $v \cdot v = |v|\,|v|\cos 0 = |v|^2$. Two completely different-looking expressions —
+        component arithmetic on one side, lengths and an angle on the other — land on the same
+        number, and for the self-dot that number is the squared length. This is also the honest
+        reason $v \cdot v$ can never be negative: it's a sum of squares from one direction, a
+        square of a length from the other. Only the zero vector dots to zero with itself.
+      </p>
+      <p>
+        Which is why <code>lengthSq</code> keeps showing up in real code instead of
+        <code>length</code>. The squared length is the cheap, exact, root-free quantity; the
+        square root is a late and often unnecessary step. Comparing distances? Compare the squares
+        — $|a| &lt; |b|$ exactly when $|a|^2 &lt; |b|^2$, since squaring preserves order on
+        non-negative numbers. Normalizing? You need the root, but you get its input from a dot
+        product. Nearly every "is this thing within range" test in a game engine is a self-dot and
+        a comparison, and nothing more.
       </p>
 
       <div data-widget="dot-meter" data-driven-by="02/dot"></div>
