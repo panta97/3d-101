@@ -138,6 +138,313 @@ const dotMeter: WidgetFactory = (container) => {
   }
 }
 
+/** Small square marking the right angle at `corner`, opening toward p1 and p2. */
+function rightAngle(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport2D,
+  corner: Vec2,
+  p1: Vec2,
+  p2: Vec2,
+  size = 0.3,
+): void {
+  const u = v2.normalize(v2.sub(p1, corner))
+  const w = v2.normalize(v2.sub(p2, corner))
+  if (v2.lengthSq(u) < 1e-9 || v2.lengthSq(w) < 1e-9) return
+  const c1 = v2.add(corner, v2.scale(u, size))
+  const c2 = v2.add(corner, v2.add(v2.scale(u, size), v2.scale(w, size)))
+  const c3 = v2.add(corner, v2.scale(w, size))
+  draw.line2(ctx, vp, c1, c2, { color: COLORS.dim, width: 1 })
+  draw.line2(ctx, vp, c2, c3, { color: COLORS.dim, width: 1 })
+}
+
+/* ------------------------------------------------------------------------ */
+/* 2.2 axis-reader (explanatory — no exercise drives it)                     */
+/* ------------------------------------------------------------------------ */
+
+const axisReader: WidgetFactory = (container) => {
+  let a = v2.vec2(4, 3)
+  let theta = 15 * DEG
+  let angleSlider: { get(): number; set(v: number): void } | null = null
+
+  const bHatOf = () => v2.vec2(Math.cos(theta), Math.sin(theta))
+
+  const widget = new CanvasWidget(container, {
+    mode: 'static',
+    height: 360,
+    draw(ctx, w) {
+      const bHat = bHatOf()
+      const coord = v2.dot(a, bHat) // the measurement
+      const p = v2.scale(bHat, coord) // measure, then rebuild
+      const armColor = coord >= 0 ? COLORS.green : COLORS.red
+
+      draw.grid2(ctx, vp, w)
+
+      // b̂'s line runs both ways, so a negative coordinate has somewhere to land.
+      draw.line2(ctx, vp, v2.scale(bHat, -20), v2.scale(bHat, 20), {
+        color: COLORS.grid,
+        width: 1,
+        dash: [5, 5],
+      })
+
+      // The perpendicular drop — a's shadow onto b̂'s line.
+      draw.line2(ctx, vp, a, p, { color: COLORS.ghost, width: 1, dash: [4, 4] })
+      rightAngle(ctx, vp, p, v2.vec2(0, 0), a)
+
+      draw.arrow2(ctx, vp, v2.vec2(0, 0), p, { color: armColor, width: 4 })
+      draw.arrow2(ctx, vp, v2.vec2(0, 0), bHat, { color: COLORS.yellow, width: 3 })
+      draw.arrow2(ctx, vp, v2.vec2(0, 0), a, { color: COLORS.accent, label: 'a' })
+
+      const sp = vp.toScreen(p)
+      draw.drawLabel(ctx, `a · b̂ = ${coord.toFixed(2)}`, v2.vec2(sp.x + 10, sp.y + 18), armColor)
+      const sb = vp.toScreen(bHat)
+      draw.drawLabel(ctx, 'b̂', v2.vec2(sb.x + 8, sb.y + 12), COLORS.yellow)
+
+      const ang = v2.angleBetween(a, bHat)
+      draw.angleArc2(ctx, vp, v2.vec2(0, 0), bHat, a, {
+        radiusPx: 42,
+        label: `${Math.round(ang / DEG)}°`,
+      })
+
+      const fmt = (q: Vec2) => `(${q.x.toFixed(2)}, ${q.y.toFixed(2)})`
+      const verdict =
+        coord >= 0
+          ? 'positive — the shadow lands ahead of the origin'
+          : 'negative — past 90°, the shadow lands behind the origin'
+      setHud(
+        `a = ${fmt(a)}   b̂ = ${fmt(bHat)}   θ = ${Math.round(ang / DEG)}°\n` +
+          `a · b̂ = ${coord.toFixed(2)}   ${verdict}`,
+      )
+    },
+  })
+
+  // Centred on the action, not the origin: a lives up and to the right.
+  const vp = new Viewport2D(widget, { center: v2.vec2(1.2, 0.8), unitsHigh: 8 })
+  const setHud = hud(container)
+
+  widget.handles.push(
+    worldHandle(vp, () => a, (p) => (a = p)),
+    worldHandle(vp, bHatOf, (p) => {
+      if (v2.lengthSq(p) < 1e-6) return // dead centre has no direction to read
+      theta = Math.atan2(p.y, p.x)
+      const deg = ((theta / DEG) % 360 + 360) % 360
+      angleSlider?.set(Math.round(deg))
+    }),
+  )
+
+  const bar = controlsBar(container)
+  angleSlider = bar.slider({
+    label: 'b̂ angle',
+    min: 0,
+    max: 360,
+    step: 1,
+    value: 15,
+    format: (v) => `${v.toFixed(0)}°`,
+    onInput: (v) => {
+      theta = v * DEG
+      widget.requestDraw()
+    },
+  })
+  bar.button({
+    label: 'snap b̂ to x̂',
+    onClick: () => {
+      theta = 0
+      angleSlider?.set(0)
+      widget.requestDraw()
+    },
+  })
+
+  widgetNote(
+    container,
+    'Drag <b>a</b>, or drag <b>b̂</b> around its circle. Snap b̂ to x̂ and the readout is just a’s x-coordinate — the dot product was reading coordinates all along. Swing b̂ past 90° from a and the number goes negative.',
+  )
+}
+
+/* ------------------------------------------------------------------------ */
+/* 2.2 split-lab (explanatory — no exercise drives it)                       */
+/* ------------------------------------------------------------------------ */
+
+const splitLab: WidgetFactory = (container) => {
+  let a = v2.vec2(4, 3)
+  let b = v2.vec2(3, 0)
+
+  const widget = new CanvasWidget(container, {
+    mode: 'static',
+    height: 360,
+    draw(ctx, w) {
+      const proj = v2.project(a, b)
+      const rej = v2.reject(a, b)
+
+      draw.grid2(ctx, vp, w)
+
+      const bHat = v2.normalize(b)
+      if (v2.lengthSq(bHat) > 0) {
+        draw.line2(ctx, vp, v2.scale(bHat, -20), v2.scale(bHat, 20), {
+          color: COLORS.grid,
+          width: 1,
+          dash: [5, 5],
+        })
+      }
+
+      // The rejection is drawn where it lives: from the projection's tip to a's.
+      draw.arrow2(ctx, vp, proj, a, { color: COLORS.purple, width: 4 })
+      draw.arrow2(ctx, vp, v2.vec2(0, 0), proj, { color: COLORS.green, width: 4 })
+      rightAngle(ctx, vp, proj, v2.vec2(0, 0), a)
+
+      draw.arrow2(ctx, vp, v2.vec2(0, 0), b, { color: COLORS.yellow, width: 3, label: 'b' })
+      draw.arrow2(ctx, vp, v2.vec2(0, 0), a, { color: COLORS.accent, label: 'a' })
+
+      const sp = vp.toScreen(v2.lerp(v2.vec2(0, 0), proj, 0.5))
+      draw.drawLabel(ctx, 'along', v2.vec2(sp.x - 16, sp.y + 20), COLORS.green)
+      const sr = vp.toScreen(v2.lerp(proj, a, 0.5))
+      draw.drawLabel(ctx, 'across', v2.vec2(sr.x + 12, sr.y), COLORS.purple)
+
+      const fmt = (q: Vec2) => `(${q.x.toFixed(2)}, ${q.y.toFixed(2)})`
+      const sum = v2.add(proj, rej)
+      setHud(
+        `project(a, b) = ${fmt(proj)}   along\n` +
+          `reject(a, b)  = ${fmt(rej)}   across\n` +
+          `project + reject = ${fmt(sum)} = a\n` +
+          `|b| = ${v2.length(b).toFixed(2)}   lengthSq(b) = ${v2.lengthSq(b).toFixed(2)}`,
+      )
+    },
+  })
+
+  const vp = new Viewport2D(widget, { center: v2.vec2(1.4, 0.9), unitsHigh: 8 })
+  const setHud = hud(container)
+
+  widget.handles.push(
+    worldHandle(vp, () => a, (p) => (a = p)),
+    worldHandle(vp, () => b, (p) => (b = p)),
+  )
+
+  const bar = controlsBar(container)
+  bar.button({
+    label: 'double b',
+    onClick: () => {
+      b = v2.scale(b, 2)
+      widget.requestDraw()
+    },
+  })
+  bar.button({
+    label: 'halve b',
+    onClick: () => {
+      b = v2.scale(b, 0.5)
+      widget.requestDraw()
+    },
+  })
+
+  widgetNote(
+    container,
+    'Drag <b>a</b> and <b>b</b>. Green plus purple always rebuilds <b>a</b> exactly — that’s along + across. Now hit <i>double b</i>: b’s arrow grows, and the projection does not move a pixel. That is <code>lengthSq(b)</code> in the denominator dividing b’s length back out, twice.',
+  )
+}
+
+/* ------------------------------------------------------------------------ */
+/* 2.2 ramp-split (explanatory — no exercise drives it)                      */
+/* ------------------------------------------------------------------------ */
+
+const rampSplit: WidgetFactory = (container) => {
+  let slope = 30 * DEG
+  const G = 9.8
+
+  const widget = new CanvasWidget(container, {
+    mode: 'static',
+    height: 340,
+    draw(ctx, w) {
+      // The ramp descends to the left, so its apex grows away from the HUD.
+      const L = 6.4
+      const baseY = -2.2
+      const heel = v2.vec2(3.4, baseY)
+      const top = v2.vec2(3.4, baseY + L * Math.sin(slope))
+      const toe = v2.vec2(3.4 - L * Math.cos(slope), baseY)
+
+      draw.grid2(ctx, vp, w)
+
+      const s1 = vp.toScreen(heel)
+      const s2 = vp.toScreen(top)
+      const s3 = vp.toScreen(toe)
+      ctx.save()
+      ctx.fillStyle = 'rgba(198, 205, 217, 0.06)'
+      ctx.strokeStyle = COLORS.dim
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.moveTo(s1.x, s1.y)
+      ctx.lineTo(s2.x, s2.y)
+      ctx.lineTo(s3.x, s3.y)
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+      ctx.restore()
+
+      // Down-slope direction, and the surface normal pointing up out of it.
+      const sHat = v2.vec2(-Math.cos(slope), -Math.sin(slope))
+      const nHat = v2.vec2(-Math.sin(slope), Math.cos(slope))
+      const foot = v2.add(top, v2.scale(sHat, 0.42 * L))
+      const box = v2.add(foot, v2.scale(nHat, 0.3))
+
+      // The box, sitting square on the slope.
+      const cs = [
+        v2.add(box, v2.add(v2.scale(sHat, 0.3), v2.scale(nHat, 0.3))),
+        v2.add(box, v2.add(v2.scale(sHat, -0.3), v2.scale(nHat, 0.3))),
+        v2.add(box, v2.add(v2.scale(sHat, -0.3), v2.scale(nHat, -0.3))),
+        v2.add(box, v2.add(v2.scale(sHat, 0.3), v2.scale(nHat, -0.3))),
+      ]
+      for (let i = 0; i < 4; i++) {
+        draw.line2(ctx, vp, cs[i], cs[(i + 1) % 4], { color: COLORS.dim, width: 1.5 })
+      }
+
+      // One gravity vector, split by the slope into along + into.
+      const gDisp = v2.vec2(0, -2.4)
+      const along = v2.project(gDisp, sHat)
+      const into = v2.reject(gDisp, sHat)
+      const gTip = v2.add(box, gDisp)
+
+      draw.line2(ctx, vp, v2.add(box, along), gTip, { color: COLORS.ghost, width: 1, dash: [3, 4] })
+      draw.line2(ctx, vp, v2.add(box, into), gTip, { color: COLORS.ghost, width: 1, dash: [3, 4] })
+      draw.arrow2(ctx, vp, box, gTip, { color: COLORS.accent, width: 2.5 })
+      draw.arrow2(ctx, vp, box, v2.add(box, along), { color: COLORS.green, width: 4 })
+      draw.arrow2(ctx, vp, box, v2.add(box, into), { color: COLORS.purple, width: 4 })
+
+      // Gravity is labelled at its midpoint: flatten the slope and `into` converges
+      // onto gravity, so tip-anchored labels would land on top of each other.
+      const sg = vp.toScreen(v2.lerp(box, gTip, 0.5))
+      draw.drawLabel(ctx, 'gravity', v2.vec2(sg.x + 10, sg.y), COLORS.accent)
+      const sa = vp.toScreen(v2.add(box, along))
+      draw.drawLabel(ctx, 'along → slides it', v2.vec2(sa.x - 130, sa.y + 32), COLORS.green)
+      const si = vp.toScreen(v2.add(box, into))
+      draw.drawLabel(ctx, 'into → ramp resists', v2.vec2(si.x + 12, si.y + 6), COLORS.purple)
+
+      setHud(
+        `slope θ = ${Math.round(slope / DEG)}°\n` +
+          `along = |g| sin θ = ${(G * Math.sin(slope)).toFixed(2)} m/s²   slides the box\n` +
+          `into  = |g| cos θ = ${(G * Math.cos(slope)).toFixed(2)} m/s²   the ramp pushes back`,
+      )
+    },
+  })
+
+  const vp = new Viewport2D(widget, { center: v2.vec2(0.2, -0.3), unitsHigh: 8.5 })
+  const setHud = hud(container)
+
+  const bar = controlsBar(container)
+  bar.slider({
+    label: 'slope',
+    min: 5,
+    max: 60,
+    step: 1,
+    value: 30,
+    format: (v) => `${v.toFixed(0)}°`,
+    onInput: (v) => {
+      slope = v * DEG
+      widget.requestDraw()
+    },
+  })
+
+  widgetNote(
+    container,
+    'Gravity never changes — one arrow, always straight down. Drag the slope and watch the ramp re-split it: flatten it and <i>along</i> vanishes (nothing slides), steepen it and <i>along</i> takes over. Same project/reject as above, doing a physics job.',
+  )
+}
+
 /* ------------------------------------------------------------------------ */
 /* 2.2 quake-legs (drives: 02/project-reject)                                */
 /* ------------------------------------------------------------------------ */
@@ -1303,6 +1610,9 @@ const shadedSphere: WidgetFactory = (container) => {
 
 export const M02_WIDGETS: Record<string, WidgetFactory> = {
   'dot-meter': dotMeter,
+  'axis-reader': axisReader,
+  'split-lab': splitLab,
+  'ramp-split': rampSplit,
   'quake-legs': quakeLegs,
   'guard-duty': guardDuty,
   'cross-3d': cross3d,
