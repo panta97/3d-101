@@ -89,7 +89,13 @@
       <div data-exercise="02/dot"></div>
 
       <p class="hook">
-        Lambert's lighting law — <code>max(0, dot(n, L))</code>, surface normal against light
+        <span
+          class="term"
+          tabindex="0"
+          data-tooltip="Lambert's cosine law: a matte (diffuse) surface scatters incoming light equally in every direction, so its apparent brightness depends only on how squarely it faces the light — not on where the viewer stands. Brightness falls off with the cosine of the angle between the surface normal n and the direction to the light L, and when both are unit vectors that cosine is exactly dot(n, L). The max(0, …) clamp throws away the negative half: those are surfaces angled away from the light, which are simply unlit rather than negatively lit."
+          >Lambert's lighting law</span
+        >
+        — <code>max(0, dot(n, L))</code>, surface normal against light
         direction — is arguably the most-executed math expression in computer graphics, run for
         every pixel of every lit surface of every frame. Dark Souls decides a backstab with
         roughly <code>dot(victimFwd, attackerFwd) &gt; 0.7</code> — you and your victim facing
@@ -101,26 +107,68 @@
       <h2><span class="secnum">2.2</span> Projection: shadows and decomposition</h2>
 
       <p>
-        When $b$ has length 1 (write it $\hat b$), the geometric formula collapses:
-        $a \cdot \hat b = |a|\cos\theta$, which is exactly the length of $a$'s shadow on
-        $\hat b$'s line — a signed coordinate along that direction. Dot with a unit vector
-        <em>reads off a coordinate</em>. To turn that shadow back into a vector, rebuild it:
-        measure, then scale the direction by the measurement — <code>scale(b̂, dot(a, b̂))</code>.
+        Start with something you already own. Reading the x-coordinate off a vector is trivial —
+        $a_x$ is just the first number in the pair. But watch what the dot product does when you
+        feed it the x-axis direction $\hat x = (1, 0)$:
+      </p>
+      <p>$$ a \cdot \hat x \;=\; a_x \cdot 1 + a_y \cdot 0 \;=\; a_x $$</p>
+      <p>
+        The x-coordinate <em>is</em> a dot product with the x-axis. And nothing in that arithmetic
+        cared that $\hat x$ happened to be the x-axis — it only cared that it was one unit long.
+        Swap in any unit vector $\hat b$, a tilted axis pointing wherever you like, and
+        $a \cdot \hat b$ hands you $a$'s coordinate along <em>that</em> axis. That's the whole
+        idea, and it's worth saying flatly: dot with a unit vector <em>reads off a coordinate</em>.
+      </p>
+
+      <p>
+        The picture that goes with it is a shadow. Lay $\hat b$'s line down and put a light
+        directly above it, shining straight down onto the line. The shadow $a$ casts has length
+        $|a|\cos\theta$ — and that's exactly what §2.1's geometric formula collapses to, since
+        $|\hat b| = 1$ makes $a \cdot \hat b = |a|\,|\hat b|\cos\theta = |a|\cos\theta$. The
+        measurement is <em>signed</em>, which is a feature: when $a$ leans back past 90°, cosine
+        goes negative and so does the coordinate — the shadow lands on the far side of the origin.
+        Exactly like an x-coordinate going negative when you walk left of the axis.
+      </p>
+
+      <p>
+        A coordinate, though, is a number, not an arrow. To get the shadow back <em>as a vector</em>
+        you rebuild it: take the direction, stretch it by the measurement —
+        <code>scale(b̂, dot(a, b̂))</code>. Measure, then rebuild. Concretely, with $a = (4, 3)$
+        and $\hat b = (1, 0)$: measuring gives $4$, rebuilding gives $(4, 0)$ — $a$'s shadow lying
+        flat along the x-axis, precisely where you'd have drawn it by hand.
+      </p>
+
+      <div data-widget="axis-reader"></div>
+
+      <p>
+        When $b$ isn't unit length you could normalize it first, but that costs a square root, and
+        a little algebra dodges it: <code>project(a, b) = scale(b, dot(a, b) / lengthSq(b))</code>.
+        The denominator is a square rather than a length for a reason worth seeing. An overlong
+        $b$ inflates the answer <em>twice</em>: once inside <code>dot(a, b)</code>, which grows
+        with $b$'s length, and once more inside <code>scale(b, …)</code>, which grows with it
+        again. Two inflations by $|b|$ is one inflation by $|b|^2$ — and $|b|^2$ is exactly
+        <code>lengthSq(b)</code>, the self-dot from §2.1, no root required. Divide it out and only
+        $b$'s <em>direction</em> survives, which is the only thing a projection should ever depend
+        on: <code>project(a, (3,0))</code> and <code>project(a, (30,0))</code> have to agree, and
+        they do. (Module 1's zero policy applies: <code>project(a, (0,0))</code> returns
+        <code>(0,0)</code>, never NaN — the zero vector has no direction to project onto.)
       </p>
       <p>
-        For a $b$ of any length you could normalize first, but a little algebra dodges the square
-        root entirely: <code>project(a, b) = scale(b, dot(a, b) / lengthSq(b))</code>. The
-        division by <code>lengthSq(b)</code> cancels $b$'s length out twice — once for the
-        measuring, once for the rebuilding — so only $b$'s <em>direction</em> matters, as it
-        should. (Module 1's zero policy applies: <code>project(a, (0,0))</code> returns
-        <code>(0,0)</code>, never NaN.)
+        Whatever the projection didn't capture is the <em>rejection</em>:
+        <code>reject(a, b) = sub(a, project(a, b))</code> — take the whole vector, remove the
+        along-$b$ part, and what remains is the across-$b$ part, perpendicular to $b$. Physics
+        lives on this split. A box on a ramp feels one gravity vector pointing straight down, and
+        the ramp splits it in two: the part <em>along</em> the slope is what slides the box, the
+        part <em>into</em> the slope is what the ramp pushes back against. One vector, two
+        questions, one split. Take $a = (4, 3)$ and $b = (1, 0)$ again: the projection is $(4, 0)$,
+        the rejection is $(0, 3)$, and adding them hands back $(4, 3)$. That's not a coincidence of
+        the numbers — project plus reject rebuilds $a$ exactly, always. Every vector splits cleanly
+        into <em>along</em> + <em>across</em>.
       </p>
-      <p>
-        Whatever projection didn't capture is the <em>rejection</em>:
-        <code>reject(a, b) = sub(a, project(a, b))</code>, the part of $a$ perpendicular to $b$.
-        Project plus reject rebuilds $a$ exactly — every vector splits cleanly into
-        <em>along</em> + <em>across</em>.
-      </p>
+
+      <div data-widget="split-lab"></div>
+      <div data-widget="ramp-split"></div>
+
       <p class="insight">
         Dot with a unit vector reads off a coordinate along that direction; projection is
         "measure, then rebuild" — any vector splits into along + across, and physics, lighting

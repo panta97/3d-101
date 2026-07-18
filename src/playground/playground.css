@@ -1,0 +1,361 @@
+/* ---------------------------------------------------------------------------
+   Vector playground. Like the sandbox, this is an app rather than a reading
+   column: it fills the viewport and each pane scrolls itself.
+--------------------------------------------------------------------------- */
+
+body.pg-body {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body.pg-body > #playground {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.pg {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: var(--border);
+
+  /* The gutter rewrites this on drag (see splitter.ts). */
+  --pg-panel-w: 380px;
+}
+
+/* ---- expression panel ---- */
+
+.pg-panel {
+  flex: 0 0 var(--pg-panel-w);
+  min-width: 240px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+.pg-panel-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.4rem 0.5rem 0.9rem;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.pg-panel-title {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.pg-panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.pg-add,
+.pg-io {
+  flex: none;
+  height: 28px;
+  line-height: 1;
+  color: var(--fg-dim);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.pg-add {
+  width: 28px;
+  font-size: 1.1rem;
+}
+
+.pg-io {
+  padding: 0 0.5rem;
+  font: 0.72rem/1 var(--mono);
+}
+
+.pg-add:hover,
+.pg-io:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.pg-status {
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  font: 12px/1.45 var(--mono);
+  color: var(--fg-dim);
+  background: var(--bg-inset);
+  border-bottom: 1px solid var(--border);
+}
+
+.pg-status.is-error {
+  color: var(--red);
+}
+
+.pg-status[hidden] {
+  display: none;
+}
+
+.pg-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---- one expression row ---- */
+
+.pg-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.pg-row:focus-within {
+  background: var(--bg-raised);
+}
+
+.pg-swatch {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 3px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: default;
+}
+
+/* Only a row that draws something has anything to hide, so only that row's
+   swatch looks and behaves like a button. */
+.pg-swatch.is-drawable {
+  background: var(--swatch);
+  cursor: pointer;
+}
+
+.pg-row.is-hidden .pg-swatch.is-drawable {
+  background: none;
+  box-shadow: inset 0 0 0 2px var(--swatch);
+}
+
+.pg-row.is-hidden .pg-input,
+.pg-row.is-hidden .pg-out {
+  opacity: 0.5;
+}
+
+.pg-row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.pg-input {
+  width: 100%;
+  padding: 0.15rem 0;
+  font: 15px var(--mono);
+  color: var(--fg);
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.pg-input::placeholder {
+  color: var(--fg-dim);
+}
+
+.pg-out {
+  min-height: 1.1em;
+  font: 12px var(--mono);
+  line-height: 1.4;
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+}
+
+.pg-row.is-error .pg-out {
+  color: var(--red);
+}
+
+.pg-slider {
+  width: 100%;
+  margin: 0.35rem 0 0.1rem;
+  accent-color: var(--accent);
+}
+
+.pg-slider[hidden] {
+  display: none;
+}
+
+.pg-del {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 3px;
+  font-size: 1rem;
+  line-height: 1;
+  color: transparent;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.pg-row:hover .pg-del,
+.pg-row:focus-within .pg-del {
+  color: var(--fg-dim);
+}
+
+.pg-del:hover {
+  color: var(--red);
+}
+
+/* ---- reference ---- */
+
+.pg-help {
+  margin-top: auto;
+  padding: 0.6rem 0.9rem 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--fg-dim);
+}
+
+.pg-help summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+
+.pg-help p {
+  margin: 0.7rem 0;
+  line-height: 1.55;
+}
+
+.pg-help ul {
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-help li {
+  padding: 0.12rem 0;
+}
+
+.pg-help code {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--fg);
+}
+
+/* ---- gutter ---- */
+
+.pg-gutter {
+  flex: none;
+  width: 5px;
+  cursor: col-resize;
+  background: var(--border);
+  transition: background 120ms;
+}
+
+.pg-gutter:hover,
+.pg-gutter:focus-visible,
+.pg-gutter.is-dragging {
+  background: var(--accent);
+  outline: none;
+}
+
+/* Cursor and hit-testing stay put for the whole drag, not just while the
+   pointer happens to be over the 5px gutter. */
+body.sb-resizing-x {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.sb-resizing-x * {
+  pointer-events: none;
+}
+
+/* ---- plot ---- */
+
+.pg-plot {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 320px;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.pg-view {
+  position: absolute;
+  inset: 0;
+}
+
+.pg-view canvas {
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+
+.pg-view canvas.is-draggable {
+  cursor: grab;
+}
+
+.pg-view canvas.is-dragging {
+  cursor: grabbing;
+}
+
+.pg-view-tools {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.pg-tool {
+  width: 30px;
+  height: 30px;
+  font: 14px var(--mono);
+  color: var(--fg-dim);
+  background: var(--bg-raised);
+  border: none;
+  cursor: pointer;
+}
+
+.pg-tool:hover {
+  color: var(--accent);
+}
+
+/* ---- narrow screens: the list sits above the plot ---- */
+
+@media (max-width: 720px) {
+  .pg {
+    flex-direction: column;
+  }
+
+  .pg-panel {
+    flex: 0 0 45%;
+  }
+
+  .pg-gutter {
+    display: none;
+  }
+}
